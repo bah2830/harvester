@@ -52,6 +52,8 @@ func (h *harvester) refresh() {
 func (h *harvester) renderSettingsWindow() {
 	refreshInterval := widget.NewEntry()
 	refreshInterval.SetText(h.settings.refreshInterval.String())
+	jiraURL := widget.NewEntry()
+	jiraURL.SetText(h.settings.jira.url)
 	jiraUser := widget.NewEntry()
 	jiraUser.SetText(h.settings.jira.user)
 	jiraPass := widget.NewPasswordEntry()
@@ -87,6 +89,10 @@ func (h *harvester) renderSettingsWindow() {
 				"Jira",
 				widget.NewForm(
 					&widget.FormItem{
+						Text:   "URL",
+						Widget: jiraURL,
+					},
+					&widget.FormItem{
 						Text:   "Username",
 						Widget: jiraUser,
 					},
@@ -112,6 +118,7 @@ func (h *harvester) renderSettingsWindow() {
 			widget.NewButton("Submit", func() {
 				h.settings.jira.user = jiraUser.Text
 				h.settings.jira.pass = jiraPass.Text
+				h.settings.jira.url = jiraURL.Text
 				h.settings.harvest.user = harvestUser.Text
 				h.settings.harvest.pass = harvestPass.Text
 

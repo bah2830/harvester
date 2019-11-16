@@ -21,7 +21,7 @@ type settings struct {
 }
 
 type settingsData struct {
-	user, pass string
+	url, user, pass string
 }
 
 func newHarvester() *harvester {
