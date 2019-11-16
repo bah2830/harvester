@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"time"
 
 	"fyne.io/fyne"
@@ -10,7 +11,7 @@ import (
 
 func (h *harvester) renderMainWindow() {
 	h.mainWindow = h.app.NewWindow("Harvester")
-	h.mainWindow.Resize(fyne.Size{Width: 400})
+	h.mainWindow.Resize(fyne.Size{Width: 400, Height: 100})
 	h.mainWindow.SetPadded(false)
 	h.mainWindow.SetOnClosed(func() {
 		// @TODO: Add code to stop all timers
@@ -19,41 +20,42 @@ func (h *harvester) renderMainWindow() {
 	h.mainWindow.Show()
 }
 
-func (h *harvester) refresh() {
+func (h *harvester) redraw() {
 	h.mainWindow.SetContent(widget.NewVBox(
 		widget.NewToolbar(
+			widget.NewToolbarAction(
+				theme.DocumentSaveIcon(),
+				func() {
+					h.showJiraTimes()
+				},
+			),
+			widget.NewToolbarAction(
+				theme.ViewRefreshIcon(),
+				func() {
+					h.refresh()
+				},
+			),
+			widget.NewToolbarSpacer(),
 			widget.NewToolbarAction(
 				theme.SettingsIcon(),
 				func() {
 					h.renderSettingsWindow()
 				},
 			),
-			widget.NewToolbarSpacer(),
-			widget.NewToolbarAction(
-				theme.DocumentSaveIcon(),
-				func() {
-					// @TODO: Add options to export jira hours as text or upload to harvest
-					h.app.Quit()
-				},
-			),
-			widget.NewToolbarAction(
-				theme.ViewRefreshIcon(),
-				func() {
-					// @TODO: Add jira refresh
-					h.app.Quit()
-				},
-			),
 		),
-		widget.NewLabel(time.Now().Format(time.Stamp)),
+		widget.NewVBox(h.drawJiraObjects()...),
 		widget.NewButton("Stop All", func() {
-			// @TODO:  Add code to stop all started jiras
+			for _, jira := range h.activeJiras {
+				h.saveJiraTime(jira.Key, "stop")
+			}
+			h.refresh()
 		}),
 	))
 }
 
 func (h *harvester) renderSettingsWindow() {
 	refreshInterval := widget.NewEntry()
-	refreshInterval.SetText(h.settings.refreshInterval.String())
+	refreshInterval.SetText(h.settings.RefreshInterval.String())
 
 	themeSelector := widget.NewCheck("Dark Mode", func(checked bool) {
 		if checked {
@@ -62,22 +64,22 @@ func (h *harvester) renderSettingsWindow() {
 			h.app.Settings().SetTheme(theme.LightTheme())
 		}
 	})
-	if h.settings.darkTheme {
+	if h.settings.DarkTheme {
 		themeSelector.SetChecked(true)
 	} else {
 		themeSelector.SetChecked(false)
 	}
 
 	jiraURL := widget.NewEntry()
-	jiraURL.SetText(h.settings.jira.url)
+	jiraURL.SetText(h.settings.Jira.URL)
 	jiraUser := widget.NewEntry()
-	jiraUser.SetText(h.settings.jira.user)
+	jiraUser.SetText(h.settings.Jira.User)
 	jiraPass := widget.NewPasswordEntry()
-	jiraPass.SetText(h.settings.jira.pass)
+	jiraPass.SetText(h.settings.Jira.Pass)
 	harvestUser := widget.NewEntry()
-	harvestUser.SetText(h.settings.harvest.user)
+	harvestUser.SetText(h.settings.Harvest.User)
 	harvestPass := widget.NewPasswordEntry()
-	harvestPass.SetText(h.settings.harvest.pass)
+	harvestPass.SetText(h.settings.Harvest.Pass)
 
 	errorMsg := widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	errorBox := widget.NewHBox(
@@ -133,11 +135,11 @@ func (h *harvester) renderSettingsWindow() {
 				),
 			),
 			widget.NewButton("Submit", func() {
-				h.settings.jira.user = jiraUser.Text
-				h.settings.jira.pass = jiraPass.Text
-				h.settings.jira.url = jiraURL.Text
-				h.settings.harvest.user = harvestUser.Text
-				h.settings.harvest.pass = harvestPass.Text
+				h.settings.Jira.User = jiraUser.Text
+				h.settings.Jira.Pass = jiraPass.Text
+				h.settings.Jira.URL = strings.TrimSuffix(jiraURL.Text, "/")
+				h.settings.Harvest.User = harvestUser.Text
+				h.settings.Harvest.Pass = harvestPass.Text
 
 				interval, err := time.ParseDuration(refreshInterval.Text)
 				if err != nil {
@@ -145,8 +147,8 @@ func (h *harvester) renderSettingsWindow() {
 					errorMsg.SetText(err.Error())
 					return
 				}
-				h.settings.refreshInterval = interval
-				h.settings.darkTheme = themeSelector.Checked
+				h.settings.RefreshInterval = interval
+				h.settings.DarkTheme = themeSelector.Checked
 
 				// Notify the parent process that something has changed
 				h.changeCh <- true
