@@ -5,6 +5,7 @@ import (
 
 	"fyne.io/fyne"
 	"fyne.io/fyne/app"
+	"fyne.io/fyne/theme"
 )
 
 type harvester struct {
@@ -17,6 +18,7 @@ type harvester struct {
 
 type settings struct {
 	refreshInterval time.Duration
+	darkTheme       bool
 	jira, harvest   settingsData
 }
 
@@ -29,9 +31,17 @@ func newHarvester() *harvester {
 		app: app.New(),
 		settings: settings{
 			refreshInterval: defaultRefreshInterval,
+			darkTheme:       true,
 		},
 		changeCh: make(chan bool),
 	}
+
+	if h.settings.darkTheme {
+		h.app.Settings().SetTheme(theme.DarkTheme())
+	} else {
+		h.app.Settings().SetTheme(theme.LightTheme())
+	}
+
 	h.renderMainWindow()
 	return h
 }
@@ -40,6 +50,7 @@ func (h *harvester) start() {
 	// @TODO: get data from database
 
 	interval := h.settings.refreshInterval
+
 	tick := time.NewTicker(interval)
 	for {
 		select {

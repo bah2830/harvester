@@ -32,12 +32,14 @@ func (h *harvester) refresh() {
 			widget.NewToolbarAction(
 				theme.DocumentSaveIcon(),
 				func() {
+					// @TODO: Add options to export jira hours as text or upload to harvest
 					h.app.Quit()
 				},
 			),
 			widget.NewToolbarAction(
-				theme.ConfirmIcon(),
+				theme.ViewRefreshIcon(),
 				func() {
+					// @TODO: Add jira refresh
 					h.app.Quit()
 				},
 			),
@@ -52,6 +54,20 @@ func (h *harvester) refresh() {
 func (h *harvester) renderSettingsWindow() {
 	refreshInterval := widget.NewEntry()
 	refreshInterval.SetText(h.settings.refreshInterval.String())
+
+	themeSelector := widget.NewCheck("Dark Mode", func(checked bool) {
+		if checked {
+			h.app.Settings().SetTheme(theme.DarkTheme())
+		} else {
+			h.app.Settings().SetTheme(theme.LightTheme())
+		}
+	})
+	if h.settings.darkTheme {
+		themeSelector.SetChecked(true)
+	} else {
+		themeSelector.SetChecked(false)
+	}
+
 	jiraURL := widget.NewEntry()
 	jiraURL.SetText(h.settings.jira.url)
 	jiraUser := widget.NewEntry()
@@ -78,6 +94,7 @@ func (h *harvester) renderSettingsWindow() {
 			errorBox,
 			widget.NewGroup(
 				"General",
+				themeSelector,
 				widget.NewForm(
 					&widget.FormItem{
 						Text:   "Refresh Interval",
@@ -129,6 +146,7 @@ func (h *harvester) renderSettingsWindow() {
 					return
 				}
 				h.settings.refreshInterval = interval
+				h.settings.darkTheme = themeSelector.Checked
 
 				// Notify the parent process that something has changed
 				h.changeCh <- true
