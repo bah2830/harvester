@@ -49,6 +49,8 @@ func newHarvester(db *sql.DB) (*harvester, error) {
 		return nil, err
 	}
 
+	h.app.SetIcon(harvestIcon)
+
 	if h.settings.DarkTheme {
 		h.app.Settings().SetTheme(theme.DarkTheme())
 	} else {
@@ -60,13 +62,14 @@ func newHarvester(db *sql.DB) (*harvester, error) {
 }
 
 func (h *harvester) start() {
-	interval := h.settings.RefreshInterval
+	// Hold onto the last copy of settings to check for diffs
+	previousSettings := h.settings
 
 	if err := h.refresh(); err != nil {
 		log.Fatal(err)
 	}
 
-	tick := time.NewTicker(interval)
+	tick := time.NewTicker(previousSettings.RefreshInterval)
 	for {
 		select {
 		case <-tick.C:
@@ -78,20 +81,34 @@ func (h *harvester) start() {
 				log.Printf("ERROR: %s", err.Error())
 			}
 
-			if interval != h.settings.RefreshInterval {
-				interval = h.settings.RefreshInterval
-				tick = time.NewTicker(interval)
+			// If refresh interval changed update the ticket
+			if previousSettings.RefreshInterval != h.settings.RefreshInterval {
+				tick = time.NewTicker(h.settings.RefreshInterval)
 			}
+
+			// If the jira credentials changed get a new client
+			if h.settings.Jira.URL != previousSettings.Jira.URL ||
+				h.settings.Jira.User != previousSettings.Jira.User ||
+				h.settings.Jira.Pass != previousSettings.Jira.Pass {
+				if err := h.getNewJiraClient(); err != nil {
+					log.Print(err)
+				}
+			}
+
+			previousSettings = h.settings
+			h.refresh()
 		}
 	}
 }
 
 func (h *harvester) refresh() error {
-	issues, err := h.getUsersActiveIssues()
-	if err != nil {
-		return err
+	if h.jiraClient != nil {
+		issues, err := h.getUsersActiveIssues()
+		if err != nil {
+			return err
+		}
+		h.activeJiras = issues
 	}
-	h.activeJiras = issues
 
 	h.redraw()
 	return nil
@@ -99,8 +116,13 @@ func (h *harvester) refresh() error {
 
 func (h *harvester) init() error {
 	var settings string
-	if err := h.db.QueryRow("select settings from settings").Scan(&settings); err != nil {
+	err := h.db.QueryRow("select settings from settings").Scan(&settings)
+	if err != nil && err != sql.ErrNoRows {
 		return err
+	}
+
+	if settings == "" {
+		return nil
 	}
 
 	set, err := base64.StdEncoding.DecodeString(settings)
@@ -113,18 +135,26 @@ func (h *harvester) init() error {
 	}
 
 	if h.settings.Jira.URL != "" && h.settings.Jira.User != "" {
-		tp := jira.BasicAuthTransport{
-			Username: h.settings.Jira.User,
-			Password: h.settings.Jira.Pass,
-		}
-
-		jiraClient, err := jira.NewClient(tp.Client(), h.settings.Jira.URL)
-		if err != nil {
+		if err := h.getNewJiraClient(); err != nil {
 			return err
 		}
-		h.jiraClient = jiraClient
 	}
 
+	return nil
+}
+
+func (h *harvester) getNewJiraClient() error {
+	tp := jira.BasicAuthTransport{
+		Username: h.settings.Jira.User,
+		Password: h.settings.Jira.Pass,
+	}
+
+	jiraClient, err := jira.NewClient(tp.Client(), h.settings.Jira.URL)
+	if err != nil {
+		return err
+	}
+
+	h.jiraClient = jiraClient
 	return nil
 }
 
@@ -134,7 +164,7 @@ func (h *harvester) stop() {
 	}
 
 	for _, jiraTracker := range h.activeJiras {
-		h.saveJiraTime(jiraTracker.Key, "stop")
+		h.saveJiraTime(jiraTracker, "stop")
 	}
 }
 

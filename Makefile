@@ -24,6 +24,9 @@ package_windows: build
 build:
 	go build -o ${BUILD_PATH}${NAME}
 
+generate_icons:
+	fyne bundle -name harvestIcon ./icon.png > icons.go
+
 define package
 	fyne package -name ${NAME} -executable ${BUILD_PATH}${NAME} -os ${OS} -icon ${ICON_PATH}
 	rm -rf ${BUILD_PATH}${NAME}.app

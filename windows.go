@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -23,32 +24,30 @@ func (h *harvester) renderMainWindow() {
 func (h *harvester) redraw() {
 	h.mainWindow.SetContent(widget.NewVBox(
 		widget.NewToolbar(
-			widget.NewToolbarAction(
-				theme.DocumentSaveIcon(),
-				func() {
-					h.showJiraTimes()
-				},
-			),
-			widget.NewToolbarAction(
-				theme.ViewRefreshIcon(),
-				func() {
-					h.refresh()
-				},
-			),
+			widget.NewToolbarAction(theme.InfoIcon(), func() {
+				h.showJiraTimes(nil)
+			}),
+			widget.NewToolbarAction(theme.ContentCopyIcon(), func() {
+				var clipboard string
+				for _, jira := range h.activeJiras {
+					clipboard += fmt.Sprintf("%s: %s\n", jira.Key, jira.Fields.Summary)
+				}
+				h.mainWindow.Clipboard().SetContent(clipboard)
+			}),
+			widget.NewToolbarAction(theme.ViewRefreshIcon(), func() {
+				h.refresh()
+			}),
 			widget.NewToolbarSpacer(),
-			widget.NewToolbarAction(
-				theme.SettingsIcon(),
-				func() {
-					h.renderSettingsWindow()
-				},
-			),
+			widget.NewToolbarAction(theme.SettingsIcon(), func() {
+				h.renderSettingsWindow()
+			}),
 		),
 		widget.NewVBox(h.drawJiraObjects()...),
-		widget.NewButton("Stop All", func() {
+		widget.NewButtonWithIcon("Stop All", theme.CancelIcon(), func() {
 			for _, jira := range h.activeJiras {
-				h.saveJiraTime(jira.Key, "stop")
+				h.saveJiraTime(jira, "stop")
 			}
-			h.refresh()
+			h.redraw()
 		}),
 	))
 }

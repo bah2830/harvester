@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	defaultRefreshInterval = 30 * time.Second
+	defaultRefreshInterval = 5 * time.Minute
 )
 
 var (
