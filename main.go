@@ -16,14 +16,26 @@ import (
 
 const (
 	defaultRefreshInterval = 5 * time.Minute
+	version                = "alpha-1"
 )
 
 var (
-	dbFile = flag.String("db.file", "./harvester.db", "Path to the local database")
+	dbFile = flag.String("db.file", "", "Path to the local database")
 )
 
 func main() {
 	flag.Parse()
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if *dbFile == "" {
+		*dbFile = home + "/.harvester.db"
+	}
+
+	log.Printf("using database file at %s", *dbFile)
 
 	db, err := sql.Open("sqlite3", *dbFile)
 	if err != nil {
@@ -46,7 +58,7 @@ func main() {
 	signal.Notify(c, os.Interrupt)
 	go func() {
 		<-c
-		log.Println("received kill signal")
+		log.Println("received kill signal, exiting")
 		h.stop()
 		os.Exit(0)
 	}()

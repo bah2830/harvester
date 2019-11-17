@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"net/url"
 	"sort"
 	"strconv"
@@ -422,4 +423,23 @@ func week(date time.Time) int {
 	_, thisWeek := date.ISOWeek()
 	_, beginningWeek := beginningOfTheMonth.ISOWeek()
 	return 1 + thisWeek - beginningWeek
+}
+
+// jiraPurger will check for old jiras every few hours and purge any that are more than 90 days old
+func (h *harvester) jiraPurger() {
+	purge := func() error {
+		_, err := h.db.Exec("delete from jira_time_tracking where started_at < ?", time.Now().UTC().Add(-90*24*time.Hour))
+		return err
+	}
+
+	if err := purge(); err != nil {
+		log.Print(err)
+	}
+
+	tick := time.NewTicker(3 * time.Hour)
+	for range tick.C {
+		if err := purge(); err != nil {
+			log.Print(err)
+		}
+	}
 }

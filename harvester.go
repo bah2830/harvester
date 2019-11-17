@@ -65,6 +65,9 @@ func (h *harvester) start() {
 	// Hold onto the last copy of settings to check for diffs
 	previousSettings := h.settings
 
+	// Start the purger to keep the database small
+	go h.jiraPurger()
+
 	if err := h.refresh(); err != nil {
 		log.Fatal(err)
 	}

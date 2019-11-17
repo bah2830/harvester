@@ -6,17 +6,15 @@ import (
 	"time"
 
 	"fyne.io/fyne"
+	"fyne.io/fyne/layout"
 	"fyne.io/fyne/theme"
 	"fyne.io/fyne/widget"
 )
 
 func (h *harvester) renderMainWindow() {
-	h.mainWindow = h.app.NewWindow("Harvester")
+	h.mainWindow = h.app.NewWindow("Harvester (" + version + ")")
 	h.mainWindow.Resize(fyne.Size{Width: 400, Height: 100})
 	h.mainWindow.SetPadded(false)
-	h.mainWindow.SetOnClosed(func() {
-		// @TODO: Add code to stop all timers
-	})
 	h.refresh()
 	h.mainWindow.Show()
 }
@@ -24,31 +22,33 @@ func (h *harvester) renderMainWindow() {
 func (h *harvester) redraw() {
 	h.mainWindow.SetContent(widget.NewVBox(
 		widget.NewToolbar(
-			widget.NewToolbarAction(theme.InfoIcon(), func() {
-				h.showJiraTimes(nil)
-			}),
 			widget.NewToolbarAction(theme.ContentCopyIcon(), func() {
-				var clipboard string
-				for _, jira := range h.activeJiras {
-					clipboard += fmt.Sprintf("%s: %s\n", jira.Key, jira.Fields.Summary)
-				}
-				h.mainWindow.Clipboard().SetContent(clipboard)
+				h.getJiraListClipboard()
 			}),
 			widget.NewToolbarAction(theme.ViewRefreshIcon(), func() {
 				h.refresh()
 			}),
 			widget.NewToolbarSpacer(),
+			widget.NewToolbarAction(theme.InfoIcon(), func() {
+				h.renderAboutWindow()
+			}),
 			widget.NewToolbarAction(theme.SettingsIcon(), func() {
 				h.renderSettingsWindow()
 			}),
 		),
 		widget.NewVBox(h.drawJiraObjects()...),
-		widget.NewButtonWithIcon("Stop All", theme.CancelIcon(), func() {
-			for _, jira := range h.activeJiras {
-				h.saveJiraTime(jira, "stop")
-			}
-			h.redraw()
-		}),
+		widget.NewHBox(
+			widget.NewButtonWithIcon("Show Times", theme.InfoIcon(), func() {
+				h.showJiraTimes(nil)
+			}),
+			layout.NewSpacer(),
+			widget.NewButtonWithIcon("Stop All", theme.CancelIcon(), func() {
+				for _, jira := range h.activeJiras {
+					h.saveJiraTime(jira, "stop")
+				}
+				h.redraw()
+			}),
+		),
 	))
 }
 
@@ -157,4 +157,21 @@ func (h *harvester) renderSettingsWindow() {
 		),
 	)
 	h.settingsWindow.Show()
+}
+
+func (h *harvester) getJiraListClipboard() {
+	var clipboard string
+	for _, jira := range h.activeJiras {
+		clipboard += fmt.Sprintf("%s: %s\n", jira.Key, jira.Fields.Summary)
+	}
+	h.mainWindow.Clipboard().SetContent(clipboard)
+}
+
+func (h *harvester) renderAboutWindow() {
+	w := h.app.NewWindow("About")
+	w.SetContent(widget.NewHBox(
+		widget.NewLabel("Version"),
+		widget.NewLabel(version),
+	))
+	w.Show()
 }
