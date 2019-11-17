@@ -109,9 +109,9 @@ func (h *harvester) drawJiraObjects() []fyne.CanvasObject {
 
 	for _, jiraIssue := range h.activeJiras {
 		// Trim the summary to 27 chars max
-		summary := jiraIssue.Fields.Summary
-		if len(summary) > 27 {
-			summary = summary[0:24] + "..."
+		summary := fmt.Sprintf("%s: %s", jiraIssue.Key, jiraIssue.Fields.Summary)
+		if len(summary) > 36 {
+			summary = summary[0:33] + "..."
 		}
 
 		// Get the latest status for this jira if it exists
@@ -135,7 +135,7 @@ func (h *harvester) drawJiraObjects() []fyne.CanvasObject {
 		jiraRows = append(jiraRows,
 			widget.NewHBox(
 				widget.NewHyperlinkWithStyle(
-					fmt.Sprintf("%s: %s", jiraIssue.Key, summary),
+					summary,
 					h.getURL(jiraIssue.Key),
 					fyne.TextAlignLeading,
 					fyne.TextStyle{Monospace: true},

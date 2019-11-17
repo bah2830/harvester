@@ -13,7 +13,7 @@ import (
 
 func (h *harvester) renderMainWindow() {
 	h.mainWindow = h.app.NewWindow("Harvester")
-	h.mainWindow.Resize(fyne.Size{Width: 400, Height: 100})
+	h.mainWindow.Resize(fyne.Size{Width: 350, Height: 100})
 	h.mainWindow.SetPadded(false)
 	h.refresh(true)
 	h.mainWindow.Show()
