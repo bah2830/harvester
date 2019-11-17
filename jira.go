@@ -2,7 +2,9 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"image/color"
 	"log"
 	"net/url"
 	"sort"
@@ -10,6 +12,7 @@ import (
 	"time"
 
 	"fyne.io/fyne"
+	"fyne.io/fyne/canvas"
 	"fyne.io/fyne/layout"
 	"fyne.io/fyne/theme"
 	"fyne.io/fyne/widget"
@@ -59,7 +62,8 @@ type jiraTime struct {
 func (h *harvester) getUsersActiveIssues() ([]jira.Issue, error) {
 	issues, _, err := h.jiraClient.Issue.Search(issueQuery, nil)
 	if err != nil {
-		return nil, err
+		log.Print(err)
+		return nil, errors.New("error getting active jira issues")
 	}
 	return issues, err
 }
@@ -101,9 +105,9 @@ func (h *harvester) saveJiraTime(jira jira.Issue, trackType string) error {
 }
 
 func (h *harvester) drawJiraObjects() []fyne.CanvasObject {
-	jiraRows := make([]fyne.CanvasObject, len(h.activeJiras))
+	jiraRows := make([]fyne.CanvasObject, 0, len(h.activeJiras))
 
-	for i, jiraIssue := range h.activeJiras {
+	for _, jiraIssue := range h.activeJiras {
 		// Trim the summary to 27 chars max
 		summary := jiraIssue.Fields.Summary
 		if len(summary) > 27 {
@@ -128,15 +132,18 @@ func (h *harvester) drawJiraObjects() []fyne.CanvasObject {
 			status = "start"
 		}
 
-		jiraRows[i] = widget.NewHBox(
-			widget.NewHyperlinkWithStyle(
-				fmt.Sprintf("%s: %s", jiraIssue.Key, summary),
-				h.getURL(jiraIssue.Key),
-				fyne.TextAlignLeading,
-				fyne.TextStyle{Monospace: true},
+		jiraRows = append(jiraRows,
+			widget.NewHBox(
+				widget.NewHyperlinkWithStyle(
+					fmt.Sprintf("%s: %s", jiraIssue.Key, summary),
+					h.getURL(jiraIssue.Key),
+					fyne.TextAlignLeading,
+					fyne.TextStyle{Monospace: true},
+				),
+				widget.NewToolbarSpacer().ToolbarObject(),
+				h.addButton(jiraIssue, status),
 			),
-			widget.NewToolbarSpacer().ToolbarObject(),
-			h.addButton(jiraIssue, status),
+			canvas.NewLine(color.RGBA{R: 23, G: 26, B: 30, A: 255}),
 		)
 	}
 
@@ -361,6 +368,7 @@ func (h *harvester) drawTimeSummary(window fyne.Window, createdAtTime time.Time,
 
 	return widget.NewVBox(
 		fyne.NewContainerWithLayout(layout.NewGridLayout(columns), objects...),
+		canvas.NewLine(color.RGBA{R: 50, G: 50, B: 50, A: 0}),
 		widget.NewHBox(
 			widget.NewLabelWithStyle("Total", fyne.TextAlignLeading, headerStyle),
 			layout.NewSpacer(),

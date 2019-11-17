@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"log"
+	"net"
+	"net/http"
 	"time"
 
 	"fyne.io/fyne"
@@ -17,8 +19,10 @@ type harvester struct {
 	app            fyne.App
 	mainWindow     fyne.Window
 	settingsWindow fyne.Window
+	aboutWindow    fyne.Window
 	settings       settings
 	changeCh       chan bool
+	jiraMsg        string
 	db             *sql.DB
 	jiraClient     *jira.Client
 	activeJiras    []jira.Issue
@@ -27,7 +31,7 @@ type harvester struct {
 type settings struct {
 	RefreshInterval time.Duration
 	DarkTheme       bool
-	Jira, Harvest   settingsData
+	Jira            settingsData
 }
 
 type settingsData struct {
@@ -52,7 +56,8 @@ func newHarvester(db *sql.DB) (*harvester, error) {
 	h.app.SetIcon(harvestIcon)
 
 	if h.settings.DarkTheme {
-		h.app.Settings().SetTheme(theme.DarkTheme())
+		h.app.Settings().SetTheme(defaultTheme())
+		// h.app.Settings().SetTheme(theme.DarkTheme())
 	} else {
 		h.app.Settings().SetTheme(theme.LightTheme())
 	}
@@ -68,7 +73,7 @@ func (h *harvester) start() {
 	// Start the purger to keep the database small
 	go h.jiraPurger()
 
-	if err := h.refresh(); err != nil {
+	if err := h.refresh(true); err != nil {
 		log.Fatal(err)
 	}
 
@@ -76,7 +81,7 @@ func (h *harvester) start() {
 	for {
 		select {
 		case <-tick.C:
-			if err := h.refresh(); err != nil {
+			if err := h.refresh(false); err != nil {
 				log.Print(err)
 			}
 		case <-h.changeCh:
@@ -99,18 +104,28 @@ func (h *harvester) start() {
 			}
 
 			previousSettings = h.settings
-			h.refresh()
+			h.refresh(false)
 		}
 	}
 }
 
-func (h *harvester) refresh() error {
+func (h *harvester) refresh(showLoader bool) error {
 	if h.jiraClient != nil {
-		issues, err := h.getUsersActiveIssues()
-		if err != nil {
-			return err
-		}
-		h.activeJiras = issues
+		go func() {
+			defer h.redraw()
+
+			if showLoader {
+				h.jiraMsg = "Getting active jira issues"
+			}
+
+			issues, err := h.getUsersActiveIssues()
+			if err != nil {
+				h.jiraMsg = "ERROR: " + err.Error()
+				return
+			}
+			h.jiraMsg = ""
+			h.activeJiras = issues
+		}()
 	}
 
 	h.redraw()
@@ -150,6 +165,10 @@ func (h *harvester) getNewJiraClient() error {
 	tp := jira.BasicAuthTransport{
 		Username: h.settings.Jira.User,
 		Password: h.settings.Jira.Pass,
+		Transport: &http.Transport{DialContext: (&net.Dialer{
+			Timeout: 10 * time.Second,
+		}).DialContext,
+		},
 	}
 
 	jiraClient, err := jira.NewClient(tp.Client(), h.settings.Jira.URL)

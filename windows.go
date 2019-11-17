@@ -12,21 +12,33 @@ import (
 )
 
 func (h *harvester) renderMainWindow() {
-	h.mainWindow = h.app.NewWindow("Harvester (" + version + ")")
+	h.mainWindow = h.app.NewWindow("Harvester")
 	h.mainWindow.Resize(fyne.Size{Width: 400, Height: 100})
 	h.mainWindow.SetPadded(false)
-	h.refresh()
+	h.refresh(false)
 	h.mainWindow.Show()
 }
 
 func (h *harvester) redraw() {
+	mainContent := widget.NewVBox(h.drawJiraObjects()...)
+	if h.jiraMsg != "" {
+		mainContent = widget.NewVBox(widget.NewLabelWithStyle(
+			breakString(h.jiraMsg, 50),
+			fyne.TextAlignCenter,
+			fyne.TextStyle{
+				Italic: true,
+			},
+		))
+		h.jiraMsg = ""
+	}
+
 	h.mainWindow.SetContent(widget.NewVBox(
 		widget.NewToolbar(
 			widget.NewToolbarAction(theme.ContentCopyIcon(), func() {
 				h.getJiraListClipboard()
 			}),
 			widget.NewToolbarAction(theme.ViewRefreshIcon(), func() {
-				h.refresh()
+				h.refresh(false)
 			}),
 			widget.NewToolbarSpacer(),
 			widget.NewToolbarAction(theme.InfoIcon(), func() {
@@ -36,7 +48,7 @@ func (h *harvester) redraw() {
 				h.renderSettingsWindow()
 			}),
 		),
-		widget.NewVBox(h.drawJiraObjects()...),
+		mainContent,
 		widget.NewHBox(
 			widget.NewButtonWithIcon("Show Times", theme.InfoIcon(), func() {
 				h.showJiraTimes(nil)
@@ -58,7 +70,7 @@ func (h *harvester) renderSettingsWindow() {
 
 	themeSelector := widget.NewCheck("Dark Mode", func(checked bool) {
 		if checked {
-			h.app.Settings().SetTheme(theme.DarkTheme())
+			h.app.Settings().SetTheme(defaultTheme())
 		} else {
 			h.app.Settings().SetTheme(theme.LightTheme())
 		}
@@ -75,10 +87,6 @@ func (h *harvester) renderSettingsWindow() {
 	jiraUser.SetText(h.settings.Jira.User)
 	jiraPass := widget.NewPasswordEntry()
 	jiraPass.SetText(h.settings.Jira.Pass)
-	harvestUser := widget.NewEntry()
-	harvestUser.SetText(h.settings.Harvest.User)
-	harvestPass := widget.NewPasswordEntry()
-	harvestPass.SetText(h.settings.Harvest.Pass)
 
 	errorMsg := widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	errorBox := widget.NewHBox(
@@ -120,25 +128,10 @@ func (h *harvester) renderSettingsWindow() {
 					},
 				),
 			),
-			widget.NewGroup(
-				"Harvest",
-				widget.NewForm(
-					&widget.FormItem{
-						Text:   "Username",
-						Widget: harvestUser,
-					},
-					&widget.FormItem{
-						Text:   "Password",
-						Widget: harvestPass,
-					},
-				),
-			),
 			widget.NewButton("Submit", func() {
 				h.settings.Jira.User = jiraUser.Text
 				h.settings.Jira.Pass = jiraPass.Text
 				h.settings.Jira.URL = strings.TrimSuffix(jiraURL.Text, "/")
-				h.settings.Harvest.User = harvestUser.Text
-				h.settings.Harvest.Pass = harvestPass.Text
 
 				interval, err := time.ParseDuration(refreshInterval.Text)
 				if err != nil {
@@ -168,10 +161,17 @@ func (h *harvester) getJiraListClipboard() {
 }
 
 func (h *harvester) renderAboutWindow() {
-	w := h.app.NewWindow("About")
-	w.SetContent(widget.NewHBox(
+	h.aboutWindow = h.app.NewWindow("About")
+	h.aboutWindow.SetContent(widget.NewHBox(
 		widget.NewLabel("Version"),
 		widget.NewLabel(version),
 	))
-	w.Show()
+	h.aboutWindow.Show()
+}
+
+func breakString(msg string, size int) string {
+	for i := size; i < len(msg); i += (size + 1) {
+		msg = msg[:i] + "\n" + msg[i:]
+	}
+	return msg
 }
