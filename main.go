@@ -8,9 +8,10 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/bah2830/harvester/migrations"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/sqlite3"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
+	bindata "github.com/golang-migrate/migrate/v4/source/go_bindata"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -72,7 +73,19 @@ func databaseMigrate(db *sql.DB) error {
 		return err
 	}
 
-	m, err := migrate.NewWithDatabaseInstance("file://migrations", "sqlite3", driver)
+	s := bindata.Resource(
+		migrations.AssetNames(),
+		func(name string) ([]byte, error) {
+			return migrations.Asset(name)
+		},
+	)
+
+	d, err := bindata.WithInstance(s)
+	if err != nil {
+		return err
+	}
+
+	m, err := migrate.NewWithInstance("go-bindata", d, "sqlite3", driver)
 	if err != nil {
 		return err
 	}

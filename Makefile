@@ -2,7 +2,7 @@ PHONY: build package
 
 NAME=harvester
 BUILD_PATH=./artifacts/
-ICON_PATH=./icon.png
+ICON_PATH=../icon.png
 
 package_all: package_darwin package_linux package_windows
 
@@ -21,14 +21,15 @@ package_windows: build
 	$(eval OS_PACKAGE = ${NAME}.exe)
 	$(call package)
 
-build:
+package_migrations:
+	cd migrations; go-bindata -o ./migrations.go -pkg migrations .; cd ..
+
+build: package_migrations
 	go build -o ${BUILD_PATH}${NAME}
 
 generate_icons:
 	fyne bundle -name harvestIcon ./icon.png > icons.go
 
 define package
-	fyne package -name ${NAME} -executable ${BUILD_PATH}${NAME} -os ${OS} -icon ${ICON_PATH}
-	rm -rf ${BUILD_PATH}${NAME}.app
-	mv ${OS_PACKAGE} ${BUILD_PATH}
+	cd artifacts; fyne package -name ${NAME} -executable ${NAME} -os ${OS} -icon ${ICON_PATH}; cd ..
 endef
