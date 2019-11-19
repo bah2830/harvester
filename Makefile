@@ -21,10 +21,7 @@ package_windows: build
 	$(eval OS_PACKAGE = ${NAME}.exe)
 	$(call package)
 
-package_migrations:
-	cd migrations; go-bindata -o ./migrations.go -pkg migrations .; cd ..
-
-build: package_migrations
+build:
 	go build -o ${BUILD_PATH}${NAME}
 
 generate_icons:

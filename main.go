@@ -1,22 +1,18 @@
 package main
 
 import (
-	"database/sql"
 	"flag"
 	"log"
 	"os"
 	"os/signal"
 	"time"
 
-	"github.com/bah2830/harvester/migrations"
-	"github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database/sqlite3"
-	bindata "github.com/golang-migrate/migrate/v4/source/go_bindata"
+	"github.com/jinzhu/gorm"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 const (
-	defaultRefreshInterval = 5 * time.Minute
+	defaultRefreshInterval = 1 * time.Minute
 	version                = "alpha-1"
 )
 
@@ -29,7 +25,7 @@ func main() {
 
 	home, err := os.UserHomeDir()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln("Unable to get user home directory", err)
 	}
 
 	if *dbFile == "" {
@@ -38,19 +34,20 @@ func main() {
 
 	log.Printf("using database file at %s", *dbFile)
 
-	db, err := sql.Open("sqlite3", *dbFile)
+	db, err := gorm.Open("sqlite3", *dbFile)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln("Unable to open sql database", err)
 	}
 	defer db.Close()
 
-	if err := databaseMigrate(db); err != nil {
-		log.Fatal(err)
+	// Build the database schema if needed
+	if err := db.AutoMigrate(&Settings{}, &TaskTimer{}).Error; err != nil {
+		log.Fatalln("Migration error", err)
 	}
 
-	h, err := newHarvester(db)
+	h, err := NewHarvester(db)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln("Unable to get new harvester", err)
 	}
 	go h.start()
 	defer h.stop()
@@ -65,34 +62,4 @@ func main() {
 	}()
 
 	h.app.Run()
-}
-
-func databaseMigrate(db *sql.DB) error {
-	driver, err := sqlite3.WithInstance(db, &sqlite3.Config{})
-	if err != nil {
-		return err
-	}
-
-	s := bindata.Resource(
-		migrations.AssetNames(),
-		func(name string) ([]byte, error) {
-			return migrations.Asset(name)
-		},
-	)
-
-	d, err := bindata.WithInstance(s)
-	if err != nil {
-		return err
-	}
-
-	m, err := migrate.NewWithInstance("go-bindata", d, "sqlite3", driver)
-	if err != nil {
-		return err
-	}
-
-	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-		return err
-	}
-
-	return nil
 }

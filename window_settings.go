@@ -1,77 +1,13 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
 	"fyne.io/fyne"
-	"fyne.io/fyne/layout"
 	"fyne.io/fyne/theme"
 	"fyne.io/fyne/widget"
-	"github.com/bah2830/harvester/icons"
 )
-
-func (h *harvester) renderMainWindow() {
-	h.mainWindow = h.app.NewWindow("Harvester")
-	h.mainWindow.Resize(fyne.Size{Width: 350, Height: 100})
-	h.mainWindow.SetPadded(false)
-	h.refresh(true)
-	h.mainWindow.Show()
-}
-
-func (h *harvester) redraw() {
-	var mainObjects []fyne.CanvasObject
-	if h.bodyMsg != "" {
-		mainObjects = append(mainObjects, widget.NewLabelWithStyle(
-			breakString(h.bodyMsg, 50),
-			fyne.TextAlignCenter,
-			fyne.TextStyle{
-				Italic: true,
-			},
-		))
-		h.bodyMsg = ""
-	}
-	mainObjects = append(mainObjects, h.drawJiraObjects()...)
-	mainContent := widget.NewVBox(mainObjects...)
-
-	h.mainWindow.SetContent(widget.NewVBox(
-		widget.NewToolbar(
-			widget.NewToolbarAction(icons.ResourceHarvestPng, func() {
-				h.app.OpenURL(h.harvestURL)
-			}),
-			widget.NewToolbarAction(theme.ContentCopyIcon(), func() {
-				h.getJiraListClipboard()
-			}),
-			widget.NewToolbarAction(theme.ViewRefreshIcon(), func() {
-				h.refresh(false)
-			}),
-			widget.NewToolbarSpacer(),
-			widget.NewToolbarAction(theme.InfoIcon(), func() {
-				h.renderAboutWindow()
-			}),
-			widget.NewToolbarAction(theme.SettingsIcon(), func() {
-				h.renderSettingsWindow()
-			}),
-		),
-		mainContent,
-		widget.NewHBox(
-			widget.NewButtonWithIcon("Show Times", theme.InfoIcon(), func() {
-				h.showJiraTimes(nil)
-			}),
-			layout.NewSpacer(),
-			widget.NewButtonWithIcon("Stop All", theme.CancelIcon(), func() {
-				for _, jira := range h.activeJiras {
-					h.saveJiraTime(jira, "stop")
-				}
-				for _, task := range h.activeHarvest {
-					h.stopTimer(task)
-				}
-				h.redraw()
-			}),
-		),
-	))
-}
 
 func (h *harvester) renderSettingsWindow() {
 	refreshInterval := widget.NewEntry()
@@ -109,10 +45,10 @@ func (h *harvester) renderSettingsWindow() {
 	)
 	errorBox.Hide()
 
-	h.settingsWindow = h.app.NewWindow("Settings")
-	h.settingsWindow.Resize(fyne.Size{Width: 300})
-	h.settingsWindow.SetFixedSize(true)
-	h.settingsWindow.SetContent(
+	w := h.app.NewWindow("Settings")
+	w.Resize(fyne.Size{Width: 300})
+	w.SetFixedSize(true)
+	w.SetContent(
 		widget.NewVBox(
 			errorBox,
 			widget.NewGroup(
@@ -175,35 +111,9 @@ func (h *harvester) renderSettingsWindow() {
 				// Notify the parent process that something has changed
 				h.changeCh <- true
 
-				h.settingsWindow.Close()
+				w.Close()
 			}),
 		),
 	)
-	h.settingsWindow.Show()
-}
-
-func (h *harvester) getJiraListClipboard() {
-	var clipboard string
-	for _, jira := range h.activeJiras {
-		if p := h.getMatchingHarvestProject(jira); p == nil {
-			clipboard += fmt.Sprintf("%s: %s\n", jira.Key, jira.Fields.Summary)
-		}
-	}
-	h.mainWindow.Clipboard().SetContent(clipboard)
-}
-
-func (h *harvester) renderAboutWindow() {
-	h.aboutWindow = h.app.NewWindow("About")
-	h.aboutWindow.SetContent(widget.NewHBox(
-		widget.NewLabel("Version"),
-		widget.NewLabel(version),
-	))
-	h.aboutWindow.Show()
-}
-
-func breakString(msg string, size int) string {
-	for i := size; i < len(msg); i += (size + 1) {
-		msg = msg[:i] + "\n" + msg[i:]
-	}
-	return msg
+	w.Show()
 }

@@ -5,10 +5,13 @@ import (
 	"errors"
 	"time"
 
-	jira "github.com/andygrunwald/go-jira"
 	"github.com/becoded/go-harvest/harvest"
 	"golang.org/x/oauth2"
 )
+
+type HarvestClient struct {
+	*harvest.HarvestClient
+}
 
 type harvestTask struct {
 	harvest.UserProjectAssignment
@@ -22,18 +25,23 @@ func (h *harvester) getNewHarvestClient() error {
 		},
 	)
 	tc := oauth2.NewClient(context.Background(), ts)
+
 	service := harvest.NewHarvestClient(tc)
 	service.AccountId = h.settings.Harvest.User
 
-	h.harvestClient = service
+	client := &HarvestClient{
+		HarvestClient: service,
+	}
+
+	h.harvestClient = client
 	return nil
 }
 
-func (h *harvester) getHarvestCompany() (*harvest.Company, error) {
-	ctx, c := context.WithTimeout(context.Background(), 10*time.Second)
-	defer c()
+func (c *HarvestClient) getCompany() (*harvest.Company, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	company, _, err := h.harvestClient.Company.Get(ctx)
+	company, _, err := c.Company.Get(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -41,11 +49,11 @@ func (h *harvester) getHarvestCompany() (*harvest.Company, error) {
 	return company, nil
 }
 
-func (h *harvester) getHarvestProjects() ([]*harvestTask, error) {
-	ctx, c := context.WithTimeout(context.Background(), 10*time.Second)
-	defer c()
+func (c *HarvestClient) getUserProjects() ([]*harvestTask, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	asignments, _, err := h.harvestClient.Project.GetMyProjectAssignments(ctx, nil)
+	asignments, _, err := c.Project.GetMyProjectAssignments(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +67,7 @@ func (h *harvester) getHarvestProjects() ([]*harvestTask, error) {
 		tasks[i] = task
 	}
 
-	timers, err := h.getTimers()
+	timers, err := c.getTimers()
 	if err != nil {
 		return nil, err
 	}
@@ -75,12 +83,12 @@ func (h *harvester) getHarvestProjects() ([]*harvestTask, error) {
 	return tasks, nil
 }
 
-func (h *harvester) getTimers() ([]*harvest.TimeEntry, error) {
-	ctx, c := context.WithTimeout(context.Background(), 10*time.Second)
-	defer c()
+func (c *HarvestClient) getTimers() ([]*harvest.TimeEntry, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
 	isRunning := true
-	times, _, err := h.harvestClient.Timesheet.List(ctx, &harvest.TimeEntryListOptions{
+	times, _, err := c.Timesheet.List(ctx, &harvest.TimeEntryListOptions{
 		IsRunning: &isRunning,
 	})
 	if err != nil {
@@ -90,24 +98,14 @@ func (h *harvester) getTimers() ([]*harvest.TimeEntry, error) {
 	return times.TimeEntries, nil
 }
 
-func (h *harvester) getMatchingHarvestProject(jira jira.Issue) *harvestTask {
-	for _, p := range h.activeHarvest {
-		if *p.Project.Code == jira.Key {
-			return p
-		}
-	}
-
-	return nil
-}
-
-func (h *harvester) startTimer(task *harvestTask) error {
-	if task.timer != nil {
+func (t *harvestTask) startTimer(client *HarvestClient) error {
+	if t.timer != nil {
 		return nil
 	}
 
 	// Get the coding task
 	var codingTask *harvest.ProjectTaskAssignment
-	for _, t := range *task.TaskAssignments {
+	for _, t := range *t.TaskAssignments {
 		if *t.Task.Name == "Coding" {
 			codingTask = &t
 			break
@@ -120,8 +118,8 @@ func (h *harvester) startTimer(task *harvestTask) error {
 	ctx, c := context.WithTimeout(context.Background(), 10*time.Second)
 	defer c()
 
-	t, _, err := h.harvestClient.Timesheet.CreateTimeEntryViaDuration(ctx, &harvest.TimeEntryCreateViaDuration{
-		ProjectId: task.Project.Id,
+	entry, _, err := client.Timesheet.CreateTimeEntryViaDuration(ctx, &harvest.TimeEntryCreateViaDuration{
+		ProjectId: t.Project.Id,
 		TaskId:    codingTask.Task.Id,
 		SpentDate: &harvest.Date{Time: time.Now()},
 	})
@@ -129,20 +127,35 @@ func (h *harvester) startTimer(task *harvestTask) error {
 		return err
 	}
 
-	task.timer = t
+	t.timer = entry
 	return nil
 }
 
-func (h *harvester) stopTimer(task *harvestTask) error {
-	if task.timer == nil {
+func (t *harvestTask) stopTimer(client *HarvestClient) error {
+	if t.timer == nil {
 		return nil
 	}
 
 	ctx, c := context.WithTimeout(context.Background(), 10*time.Second)
 	defer c()
 
-	_, _, err := h.harvestClient.Timesheet.StopTimeEntry(ctx, *task.timer.Id)
+	_, _, err := client.Timesheet.StopTimeEntry(ctx, *t.timer.Id)
 
-	task.timer = nil
+	t.timer = nil
 	return err
+}
+
+func (c *HarvestClient) getUserProjectByKey(key string) (*harvestTask, error) {
+	tasks, err := c.getUserProjects()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, task := range tasks {
+		if *task.Project.Code == key {
+			return task, nil
+		}
+	}
+
+	return nil, nil
 }
