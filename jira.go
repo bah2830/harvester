@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"image/color"
 	"log"
+	"net"
+	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
@@ -17,6 +19,7 @@ import (
 	"fyne.io/fyne/theme"
 	"fyne.io/fyne/widget"
 	jira "github.com/andygrunwald/go-jira"
+	"github.com/bah2830/harvester/icons"
 	"github.com/jinzhu/now"
 )
 
@@ -57,6 +60,25 @@ type jiraTime struct {
 	JiraDescription string
 	Durations       []time.Duration
 	StartDay        time.Time
+}
+
+func (h *harvester) getNewJiraClient() error {
+	tp := jira.BasicAuthTransport{
+		Username: h.settings.Jira.User,
+		Password: h.settings.Jira.Pass,
+		Transport: &http.Transport{DialContext: (&net.Dialer{
+			Timeout: 10 * time.Second,
+		}).DialContext,
+		},
+	}
+
+	jiraClient, err := jira.NewClient(tp.Client(), h.settings.Jira.URL)
+	if err != nil {
+		return err
+	}
+
+	h.jiraClient = jiraClient
+	return nil
 }
 
 func (h *harvester) getUsersActiveIssues() ([]jira.Issue, error) {
@@ -107,12 +129,41 @@ func (h *harvester) saveJiraTime(jira jira.Issue, trackType string) error {
 func (h *harvester) drawJiraObjects() []fyne.CanvasObject {
 	jiraRows := make([]fyne.CanvasObject, 0, len(h.activeJiras))
 
-	for _, jiraIssue := range h.activeJiras {
-		// Trim the summary to 27 chars max
-		summary := fmt.Sprintf("%s: %s", jiraIssue.Key, jiraIssue.Fields.Summary)
+	var getSummary = func(summary string) string {
 		if len(summary) > 36 {
 			summary = summary[0:33] + "..."
 		}
+		return summary
+	}
+
+	for _, task := range h.activeHarvest {
+		summary := getSummary(fmt.Sprintf("%s: %s", *task.Project.Code, *task.Project.Name))
+
+		var status string
+		if task.timer == nil {
+			status = "start"
+		} else {
+			status = "stop"
+		}
+
+		object := widget.NewHBox(
+			widget.NewLabel(" "),
+			widget.NewIcon(icons.ResourceHarvestPng),
+			widget.NewHyperlinkWithStyle(
+				summary,
+				h.getURL(*task.Project.Code),
+				fyne.TextAlignLeading,
+				fyne.TextStyle{Monospace: true},
+			),
+			widget.NewToolbarSpacer().ToolbarObject(),
+			h.addButton(h.harvestToJira(task), status),
+			widget.NewLabel(" "),
+		)
+		jiraRows = append(jiraRows, object, canvas.NewLine(color.RGBA{R: 35, G: 38, B: 42, A: 255}))
+	}
+
+	for _, jiraIssue := range h.activeJiras {
+		summary := getSummary(fmt.Sprintf("%s: %s", jiraIssue.Key, jiraIssue.Fields.Summary))
 
 		// Get the latest status for this jira if it exists
 		var id int
@@ -132,8 +183,10 @@ func (h *harvester) drawJiraObjects() []fyne.CanvasObject {
 			status = "start"
 		}
 
-		jiraRows = append(jiraRows,
-			widget.NewHBox(
+		if task := h.getMatchingHarvestProject(jiraIssue); task == nil {
+			object := widget.NewHBox(
+				widget.NewLabel(" "),
+				widget.NewIcon(icons.ResourceArrowrightPng),
 				widget.NewHyperlinkWithStyle(
 					summary,
 					h.getURL(jiraIssue.Key),
@@ -142,9 +195,11 @@ func (h *harvester) drawJiraObjects() []fyne.CanvasObject {
 				),
 				widget.NewToolbarSpacer().ToolbarObject(),
 				h.addButton(jiraIssue, status),
-			),
-			canvas.NewLine(color.RGBA{R: 23, G: 26, B: 30, A: 255}),
-		)
+				widget.NewLabel(" "),
+			)
+
+			jiraRows = append(jiraRows, object, canvas.NewLine(color.RGBA{R: 35, G: 38, B: 42, A: 255}))
+		}
 	}
 
 	return jiraRows
@@ -157,9 +212,29 @@ func (h *harvester) getURL(jiraID string) *url.URL {
 
 func (h *harvester) addButton(jira jira.Issue, trackType string) *widget.Button {
 	return widget.NewButton(trackType, func() {
-		if err := h.saveJiraTime(jira, trackType); err == nil {
+		if err := h.saveJiraTime(jira, trackType); err != nil {
+			h.bodyMsg = err.Error()
 			h.redraw()
+			return
 		}
+
+		task := h.getMatchingHarvestProject(jira)
+		if task != nil {
+			var err error
+			switch trackType {
+			case "start":
+				err = h.startTimer(task)
+			case "stop":
+				err = h.stopTimer(task)
+			}
+			if err != nil {
+				h.bodyMsg = err.Error()
+				h.redraw()
+				return
+			}
+		}
+
+		h.redraw()
 	})
 }
 
@@ -449,5 +524,14 @@ func (h *harvester) jiraPurger() {
 		if err := purge(); err != nil {
 			log.Print(err)
 		}
+	}
+}
+
+func (h *harvester) harvestToJira(task *harvestTask) jira.Issue {
+	return jira.Issue{
+		Key: *task.Project.Code,
+		Fields: &jira.IssueFields{
+			Summary: *task.Project.Name,
+		},
 	}
 }

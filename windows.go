@@ -9,6 +9,7 @@ import (
 	"fyne.io/fyne/layout"
 	"fyne.io/fyne/theme"
 	"fyne.io/fyne/widget"
+	"github.com/bah2830/harvester/icons"
 )
 
 func (h *harvester) renderMainWindow() {
@@ -20,20 +21,25 @@ func (h *harvester) renderMainWindow() {
 }
 
 func (h *harvester) redraw() {
-	mainContent := widget.NewVBox(h.drawJiraObjects()...)
-	if h.jiraMsg != "" {
-		mainContent = widget.NewVBox(widget.NewLabelWithStyle(
-			breakString(h.jiraMsg, 50),
+	var mainObjects []fyne.CanvasObject
+	if h.bodyMsg != "" {
+		mainObjects = append(mainObjects, widget.NewLabelWithStyle(
+			breakString(h.bodyMsg, 50),
 			fyne.TextAlignCenter,
 			fyne.TextStyle{
 				Italic: true,
 			},
 		))
-		h.jiraMsg = ""
+		h.bodyMsg = ""
 	}
+	mainObjects = append(mainObjects, h.drawJiraObjects()...)
+	mainContent := widget.NewVBox(mainObjects...)
 
 	h.mainWindow.SetContent(widget.NewVBox(
 		widget.NewToolbar(
+			widget.NewToolbarAction(icons.ResourceHarvestPng, func() {
+				h.app.OpenURL(h.harvestURL)
+			}),
 			widget.NewToolbarAction(theme.ContentCopyIcon(), func() {
 				h.getJiraListClipboard()
 			}),
@@ -57,6 +63,9 @@ func (h *harvester) redraw() {
 			widget.NewButtonWithIcon("Stop All", theme.CancelIcon(), func() {
 				for _, jira := range h.activeJiras {
 					h.saveJiraTime(jira, "stop")
+				}
+				for _, task := range h.activeHarvest {
+					h.stopTimer(task)
 				}
 				h.redraw()
 			}),
@@ -87,6 +96,11 @@ func (h *harvester) renderSettingsWindow() {
 	jiraUser.SetText(h.settings.Jira.User)
 	jiraPass := widget.NewPasswordEntry()
 	jiraPass.SetText(h.settings.Jira.Pass)
+
+	harvestAccount := widget.NewEntry()
+	harvestAccount.SetText(h.settings.Harvest.User)
+	harvestToken := widget.NewPasswordEntry()
+	harvestToken.SetText(h.settings.Harvest.Pass)
 
 	errorMsg := widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	errorBox := widget.NewHBox(
@@ -128,10 +142,26 @@ func (h *harvester) renderSettingsWindow() {
 					},
 				),
 			),
+			widget.NewGroup(
+				"Harvest",
+				widget.NewForm(
+					&widget.FormItem{
+						Text:   "Account ID",
+						Widget: harvestAccount,
+					},
+					&widget.FormItem{
+						Text:   "Token",
+						Widget: harvestToken,
+					},
+				),
+			),
 			widget.NewButton("Submit", func() {
 				h.settings.Jira.User = jiraUser.Text
 				h.settings.Jira.Pass = jiraPass.Text
 				h.settings.Jira.URL = strings.TrimSuffix(jiraURL.Text, "/")
+
+				h.settings.Harvest.User = harvestAccount.Text
+				h.settings.Harvest.Pass = harvestToken.Text
 
 				interval, err := time.ParseDuration(refreshInterval.Text)
 				if err != nil {
@@ -155,7 +185,9 @@ func (h *harvester) renderSettingsWindow() {
 func (h *harvester) getJiraListClipboard() {
 	var clipboard string
 	for _, jira := range h.activeJiras {
-		clipboard += fmt.Sprintf("%s: %s\n", jira.Key, jira.Fields.Summary)
+		if p := h.getMatchingHarvestProject(jira); p == nil {
+			clipboard += fmt.Sprintf("%s: %s\n", jira.Key, jira.Fields.Summary)
+		}
 	}
 	h.mainWindow.Clipboard().SetContent(clipboard)
 }

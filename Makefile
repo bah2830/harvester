@@ -2,7 +2,7 @@ PHONY: build package
 
 NAME=harvester
 BUILD_PATH=./artifacts/
-ICON_PATH=../icon.png
+ICON_PATH=../icons/icon.png
 
 package_all: package_darwin package_linux package_windows
 
@@ -28,7 +28,7 @@ build: package_migrations
 	go build -o ${BUILD_PATH}${NAME}
 
 generate_icons:
-	fyne bundle -name harvestIcon ./icon.png > icons.go
+	fyne bundle -package icons -prefix Resource ./icons > ./icons/icons.go
 
 define package
 	cd artifacts; fyne package -name ${NAME} -executable ${NAME} -os ${OS} -icon ${ICON_PATH}; cd ..

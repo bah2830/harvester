@@ -5,14 +5,15 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"log"
-	"net"
-	"net/http"
+	"net/url"
 	"time"
 
 	"fyne.io/fyne"
 	"fyne.io/fyne/app"
 	"fyne.io/fyne/theme"
 	jira "github.com/andygrunwald/go-jira"
+	"github.com/bah2830/harvester/icons"
+	"github.com/becoded/go-harvest/harvest"
 )
 
 type harvester struct {
@@ -22,16 +23,20 @@ type harvester struct {
 	aboutWindow    fyne.Window
 	settings       settings
 	changeCh       chan bool
-	jiraMsg        string
+	bodyMsg        string
 	db             *sql.DB
 	jiraClient     *jira.Client
+	harvestClient  *harvest.HarvestClient
 	activeJiras    []jira.Issue
+	activeHarvest  []*harvestTask
+	harvestURL     *url.URL
 }
 
 type settings struct {
 	RefreshInterval time.Duration
 	DarkTheme       bool
 	Jira            settingsData
+	Harvest         settingsData
 }
 
 type settingsData struct {
@@ -53,7 +58,7 @@ func newHarvester(db *sql.DB) (*harvester, error) {
 		return nil, err
 	}
 
-	h.app.SetIcon(harvestIcon)
+	h.app.SetIcon(icons.ResourceIconPng)
 
 	if h.settings.DarkTheme {
 		h.app.Settings().SetTheme(defaultTheme())
@@ -110,23 +115,47 @@ func (h *harvester) start() {
 }
 
 func (h *harvester) refresh(showLoader bool) error {
-	if h.jiraClient != nil {
-		go func() {
-			defer h.redraw()
+	go func() {
+		defer h.redraw()
 
+		if h.jiraClient != nil {
 			if showLoader {
-				h.jiraMsg = "Getting active jira issues"
+				h.bodyMsg = "Getting active jira issues"
 			}
 
 			issues, err := h.getUsersActiveIssues()
 			if err != nil {
-				h.jiraMsg = "ERROR: " + err.Error()
+				h.bodyMsg = "ERROR: " + err.Error()
 				return
 			}
-			h.jiraMsg = ""
+			h.bodyMsg = ""
 			h.activeJiras = issues
-		}()
-	}
+		}
+
+		if h.harvestClient != nil {
+			if h.harvestURL == nil {
+				company, err := h.getHarvestCompany()
+				if err != nil {
+					h.bodyMsg = "Unabled the get details from harvest"
+					return
+				}
+				u, _ := url.Parse(*company.BaseUri)
+				h.harvestURL = u
+			}
+
+			if showLoader {
+				h.bodyMsg = "Getting active harvest issues"
+			}
+
+			tasks, err := h.getHarvestProjects()
+			if err != nil {
+				h.bodyMsg = "ERROR: " + err.Error()
+				return
+			}
+			h.bodyMsg = ""
+			h.activeHarvest = tasks
+		}
+	}()
 
 	h.redraw()
 	return nil
@@ -158,25 +187,12 @@ func (h *harvester) init() error {
 		}
 	}
 
-	return nil
-}
-
-func (h *harvester) getNewJiraClient() error {
-	tp := jira.BasicAuthTransport{
-		Username: h.settings.Jira.User,
-		Password: h.settings.Jira.Pass,
-		Transport: &http.Transport{DialContext: (&net.Dialer{
-			Timeout: 10 * time.Second,
-		}).DialContext,
-		},
+	if h.settings.Harvest.User != "" && h.settings.Harvest.Pass != "" {
+		if err := h.getNewHarvestClient(); err != nil {
+			return err
+		}
 	}
 
-	jiraClient, err := jira.NewClient(tp.Client(), h.settings.Jira.URL)
-	if err != nil {
-		return err
-	}
-
-	h.jiraClient = jiraClient
 	return nil
 }
 
@@ -187,6 +203,9 @@ func (h *harvester) stop() {
 
 	for _, jiraTracker := range h.activeJiras {
 		h.saveJiraTime(jiraTracker, "stop")
+	}
+	for _, task := range h.activeHarvest {
+		h.stopTimer(task)
 	}
 }
 
