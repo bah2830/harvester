@@ -22,6 +22,7 @@ func (h *harvester) renderMainWindow() {
 	h.mainWindow.Show()
 
 	go h.startResizeWatch()
+	go h.startRedrawIntetrval()
 }
 
 func (h *harvester) startResizeWatch() {
@@ -32,6 +33,13 @@ func (h *harvester) startResizeWatch() {
 			lastSize = h.mainWindow.Canvas().Size().Width
 			h.redraw()
 		}
+	}
+}
+
+func (h *harvester) startRedrawIntetrval() {
+	tick := time.NewTicker(5 * time.Second)
+	for range tick.C {
+		h.redraw()
 	}
 }
 

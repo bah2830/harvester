@@ -16,8 +16,13 @@ import (
 func (h *harvester) drawTimers() []fyne.CanvasObject {
 	rows := make([]fyne.CanvasObject, 0, len(h.timers))
 
-	var getSummary = func(summary string) string {
-		sizeLimit := (h.mainWindow.Canvas().Size().Width - 100) / 9
+	var getSummary = func(summary string, isRunning bool) string {
+		sizeDiff := 50
+		if isRunning {
+			sizeDiff = 100
+		}
+
+		sizeLimit := (h.mainWindow.Canvas().Size().Width - sizeDiff) / 9
 		if len(summary) > sizeLimit {
 			summary = summary[0:sizeLimit-3] + "..."
 		}
@@ -29,16 +34,16 @@ func (h *harvester) drawTimers() []fyne.CanvasObject {
 		var icon *widget.Icon
 		if timer.harvest != nil {
 			icon = widget.NewIcon(icons.ResourceHarvestPng)
-			summary = getSummary(fmt.Sprintf("%s: %s", timer.Key, *timer.harvest.Project.Name))
+			summary = getSummary(fmt.Sprintf("%s: %s", timer.Key, *timer.harvest.Project.Name), timer.IsRunning())
 		} else {
 			icon = widget.NewIcon(icons.ResourceJiraPng)
-			summary = getSummary(fmt.Sprintf("%s: %s", timer.Key, timer.jira.Fields.Summary))
+			summary = getSummary(fmt.Sprintf("%s: %s", timer.Key, timer.jira.Fields.Summary), timer.IsRunning())
 		}
 
 		rows = append(
 			rows,
 			widget.NewHBox(
-				widget.NewLabel(" "),
+				canvas.NewRectangle(color.Transparent),
 				icon,
 				widget.NewHyperlinkWithStyle(
 					summary,
@@ -48,7 +53,7 @@ func (h *harvester) drawTimers() []fyne.CanvasObject {
 				),
 				widget.NewToolbarSpacer().ToolbarObject(),
 				h.addButton(timer),
-				widget.NewLabel(" "),
+				canvas.NewRectangle(color.Transparent),
 			),
 			canvas.NewLine(color.RGBA{R: 35, G: 38, B: 42, A: 255}),
 		)
@@ -63,12 +68,15 @@ func (h *harvester) getURL(jiraID string) *url.URL {
 }
 
 func (h *harvester) addButton(timer *TaskTimer) *widget.Button {
-	status := "start"
+	icon := icons.ResourcePlayPng
+	var label string
 	if timer.IsRunning() {
-		status = "stop"
+		icon = icons.ResourceStopPng
+		runTime := time.Since(timer.StartedAt)
+		label = fmt.Sprintf("%02.0f:%02.0f", runTime.Hours(), runTime.Minutes()-float64(int(runTime.Hours())*60))
 	}
 
-	return widget.NewButton(status, func() {
+	return widget.NewButtonWithIcon(label, icon, func() {
 		defer h.redraw()
 
 		if !timer.IsRunning() {
