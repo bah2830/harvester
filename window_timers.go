@@ -73,7 +73,7 @@ func (h *harvester) addButton(timer *TaskTimer) *widget.Button {
 	if timer.IsRunning() {
 		icon = icons.ResourceStopPng
 		runTime := time.Since(timer.StartedAt)
-		label = fmt.Sprintf("%02d:%02.0f\n", int(runTime.Hours()), runTime.Minutes()-float64(int(runTime.Hours())*60))
+		label = fmt.Sprintf("%02d:%02.0f", int(runTime.Hours()), runTime.Minutes()-float64(int(runTime.Hours())*60))
 	}
 
 	return widget.NewButtonWithIcon(label, icon, func() {
