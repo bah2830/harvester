@@ -146,9 +146,15 @@ func (timers TaskTimers) GetByKey(key string) (*TaskTimer, error) {
 }
 
 func GetKeysWithTimes(db *gorm.DB) ([]string, error) {
-	var keys []string
-	if err := db.Model(&TaskTimer{}).Select("key").Group("key").Scan(&keys).Error; err != nil {
+	keyStructs := make([]struct{ Key string }, 0)
+	if err := db.Table("task_timers").Select("key").Group("key").Scan(&keyStructs).Error; err != nil {
 		return nil, err
 	}
+
+	keys := make([]string, len(keyStructs))
+	for i, key := range keyStructs {
+		keys[i] = key.Key
+	}
+
 	return keys, nil
 }

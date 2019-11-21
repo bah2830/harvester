@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -86,25 +85,18 @@ func (h *harvester) redraw() {
 func (h *harvester) getJiraListClipboard() {
 	keys, err := GetKeysWithTimes(h.db)
 	if err != nil {
-		log.Println("error getting keys with times tracked", err)
+		dialog.ShowError(err, h.mainWindow)
+		return
 	}
 
 	var clipboard string
-	for _, timer := range h.timers {
-		if timer.harvest != nil {
-			continue
-		}
 
-		var found bool
-		for _, key := range keys {
-			if timer.Key == key {
-				found = true
+	for _, key := range keys {
+		for _, timer := range h.timers {
+			if timer.Key == key && timer.harvest == nil {
+				clipboard += fmt.Sprintf("%s: %s\n", key, timer.jira.Fields.Summary)
 				break
 			}
-		}
-
-		if found {
-			clipboard += fmt.Sprintf("%s: %s\n", timer.Key, timer.jira.Fields.Summary)
 		}
 	}
 
