@@ -6,18 +6,15 @@ import (
 	"sort"
 	"time"
 
-	"fyne.io/fyne"
-	"fyne.io/fyne/app"
-	"fyne.io/fyne/dialog"
-	"fyne.io/fyne/theme"
 	jira "github.com/andygrunwald/go-jira"
+	"github.com/asticode/go-astilectron"
 	"github.com/jinzhu/gorm"
 	"github.com/pkg/errors"
 )
 
 type harvester struct {
-	app           fyne.App
-	mainWindow    fyne.Window
+	app           *astilectron.Astilectron
+	mainWindow    *astilectron.Window
 	settings      Settings
 	changeCh      chan bool
 	db            *gorm.DB
@@ -28,8 +25,15 @@ type harvester struct {
 }
 
 func NewHarvester(db *gorm.DB) (*harvester, error) {
+	app, err := astilectron.New(astilectron.Options{
+		AppName: "Harvester",
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	h := &harvester{
-		app: app.New(),
+		app: app,
 		db:  db,
 		settings: Settings{
 			RefreshInterval: defaultRefreshInterval,
@@ -43,7 +47,16 @@ func NewHarvester(db *gorm.DB) (*harvester, error) {
 		return nil, errors.WithMessage(err, "harvester init error")
 	}
 
-	h.renderMainWindow()
+	if err := h.app.Start(); err != nil {
+		return nil, err
+	}
+
+	h.app.HandleSignals()
+
+	if err := h.renderMainWindow(); err != nil {
+		return nil, err
+	}
+
 	return h, nil
 }
 
@@ -88,12 +101,10 @@ func (h *harvester) start() {
 
 func (h *harvester) refresh() error {
 	go func() {
-		defer h.redraw()
-
 		// Get any current timers running in the local database
 		timers, err := GetActiveTimers(h.db, h.jiraClient, h.harvestClient)
 		if err != nil {
-			dialog.ShowError(err, h.mainWindow)
+			log.Println(err)
 			return
 		}
 
@@ -101,7 +112,7 @@ func (h *harvester) refresh() error {
 		if h.jiraClient != nil {
 			issues, err := h.getUsersActiveIssues()
 			if err != nil {
-				dialog.ShowError(err, h.mainWindow)
+				log.Println(err)
 				return
 			}
 
@@ -126,7 +137,7 @@ func (h *harvester) refresh() error {
 			if h.harvestURL == nil {
 				company, err := h.harvestClient.getCompany()
 				if err != nil {
-					dialog.ShowError(err, h.mainWindow)
+					log.Println(err)
 					return
 				}
 				u, _ := url.Parse(*company.BaseUri)
@@ -135,7 +146,7 @@ func (h *harvester) refresh() error {
 
 			tasks, err := h.harvestClient.getUserProjects()
 			if err != nil {
-				dialog.ShowError(err, h.mainWindow)
+				log.Println(err)
 				return
 			}
 
@@ -187,13 +198,6 @@ func (h *harvester) init() error {
 		}
 	}
 
-	// Setup the application look and feel
-	if h.settings.DarkTheme {
-		h.app.Settings().SetTheme(defaultTheme())
-	} else {
-		h.app.Settings().SetTheme(theme.LightTheme())
-	}
-
 	return nil
 }
 
@@ -207,4 +211,6 @@ func (h *harvester) stop() {
 			log.Println(err)
 		}
 	}
+
+	h.app.Close()
 }

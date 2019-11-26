@@ -4,7 +4,6 @@ import (
 	"flag"
 	"log"
 	"os"
-	"os/signal"
 	"time"
 
 	"github.com/jinzhu/gorm"
@@ -52,14 +51,5 @@ func main() {
 	go h.start()
 	defer h.stop()
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-	go func() {
-		<-c
-		log.Println("received kill signal, exiting")
-		h.stop()
-		os.Exit(0)
-	}()
-
-	h.app.Run()
+	h.app.Wait()
 }
