@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"net/http"
 	"net/url"
 	"sort"
 	"time"
@@ -51,6 +52,9 @@ func NewHarvester(db *gorm.DB) (*harvester, error) {
 		return nil, err
 	}
 
+	http.Handle("/resources/", http.StripPrefix("/resources/", http.FileServer(http.Dir("resources"))))
+	go http.ListenAndServe(":46557", nil)
+
 	h.app.HandleSignals()
 
 	if err := h.renderMainWindow(); err != nil {
@@ -72,11 +76,12 @@ func (h *harvester) start() {
 		select {
 		case <-tick.C:
 			if err := h.refresh(); err != nil {
-				log.Print(err)
+				h.sendErr(err)
 			}
 		case <-h.changeCh:
 			if err := h.settings.Save(h.db); err != nil {
-				log.Printf("ERROR: %s", err.Error())
+				h.sendErr(err)
+				continue
 			}
 
 			// If refresh interval changed update the ticket
@@ -89,88 +94,89 @@ func (h *harvester) start() {
 				h.settings.Jira.User != previousSettings.Jira.User ||
 				h.settings.Jira.Pass != previousSettings.Jira.Pass {
 				if err := h.getNewJiraClient(); err != nil {
-					log.Print(err)
+					h.sendErr(err)
+					continue
 				}
 			}
 
 			previousSettings = h.settings
-			h.refresh()
+			if err := h.refresh(); err != nil {
+				h.sendErr(err)
+			}
 		}
 	}
 }
 
 func (h *harvester) refresh() error {
-	go func() {
-		// Get any current timers running in the local database
-		timers, err := GetActiveTimers(h.db, h.jiraClient, h.harvestClient)
+	// Get any current timers running in the local database
+	timers, err := GetActiveTimers(h.db, h.jiraClient, h.harvestClient)
+	if err != nil {
+		return err
+	}
+
+	// Add jira details to any timers
+	if h.jiraClient != nil {
+		issues, err := h.getUsersActiveIssues()
 		if err != nil {
-			log.Println(err)
-			return
+			return err
 		}
 
-		// Add jira details to any timers
-		if h.jiraClient != nil {
-			issues, err := h.getUsersActiveIssues()
+		// Add jiras to timers
+		for _, jira := range issues {
+			jiraIssue := jira
+			timer, err := timers.GetByKey(jira.Key)
 			if err != nil {
-				log.Println(err)
-				return
-			}
-
-			// Add jiras to timers
-			for _, jira := range issues {
-				jiraIssue := jira
-				timer, err := timers.GetByKey(jira.Key)
-				if err != nil {
-					timer = &TaskTimer{
-						Key:  jira.Key,
-						jira: &jiraIssue,
-					}
-					timers = append(timers, timer)
-					continue
+				timer = &TaskTimer{
+					Key:  jira.Key,
+					Jira: &jiraIssue,
 				}
-				timer.jira = &jiraIssue
+				timers = append(timers, timer)
+				continue
 			}
+			timer.Jira = &jiraIssue
 		}
+	}
 
-		// Add harvest details to timers
-		if h.harvestClient != nil {
-			if h.harvestURL == nil {
-				company, err := h.harvestClient.getCompany()
-				if err != nil {
-					log.Println(err)
-					return
-				}
-				u, _ := url.Parse(*company.BaseUri)
-				h.harvestURL = u
-			}
-
-			tasks, err := h.harvestClient.getUserProjects()
+	// Add harvest details to timers
+	if h.harvestClient != nil {
+		if h.harvestURL == nil {
+			company, err := h.harvestClient.getCompany()
 			if err != nil {
-				log.Println(err)
-				return
+				return err
 			}
-
-			// Add harvest projects to timers
-			for _, task := range tasks {
-				harvestTask := *task
-				timer, err := timers.GetByKey(*task.Project.Code)
-				if err != nil {
-					timer = &TaskTimer{
-						Key:     *task.Project.Code,
-						harvest: &harvestTask,
-					}
-					timers = append(timers, timer)
-					continue
-				}
-				timer.harvest = &harvestTask
-			}
+			u, _ := url.Parse(*company.BaseUri)
+			h.harvestURL = u
 		}
 
-		sort.SliceStable(timers, func(a, b int) bool {
-			return sort.StringsAreSorted([]string{timers[a].Key, timers[b].Key})
-		})
-		h.timers = timers
-	}()
+		tasks, err := h.harvestClient.getUserProjects()
+		if err != nil {
+			return err
+		}
+
+		// Add harvest projects to timers
+		for _, task := range tasks {
+			harvestTask := *task
+			timer, err := timers.GetByKey(*task.Project.Code)
+			if err != nil {
+				timer = &TaskTimer{
+					Key:     *task.Project.Code,
+					Harvest: &harvestTask,
+				}
+				timers = append(timers, timer)
+				continue
+			}
+			timer.Harvest = &harvestTask
+		}
+	}
+
+	sort.SliceStable(timers, func(a, b int) bool {
+		return sort.StringsAreSorted([]string{timers[a].Key, timers[b].Key})
+	})
+	h.timers = timers
+
+	if h.mainWindow != nil {
+		h.sendTimers(h.timers)
+	}
 
 	return nil
 }

@@ -19,8 +19,8 @@ type TaskTimer struct {
 	StartedAt time.Time  `gorm:"index:started_at"`
 	StoppedAt *time.Time `gorm:"index:stopped_at;default:NULL"`
 
-	jira    *jira.Issue  `gorm:"-"`
-	harvest *harvestTask `gorm:"-"`
+	Jira    *jira.Issue  `gorm:"-"`
+	Harvest *harvestTask `gorm:"-"`
 }
 
 type TaskTimers []*TaskTimer
@@ -45,8 +45,8 @@ func (t *TaskTimer) Start(db *gorm.DB, harvestClient *HarvestClient) error {
 	if !t.New() {
 		newTimer := &TaskTimer{
 			Key:     t.Key,
-			jira:    t.jira,
-			harvest: t.harvest,
+			Jira:    t.Jira,
+			Harvest: t.Harvest,
 		}
 		t = newTimer
 	}
@@ -57,8 +57,8 @@ func (t *TaskTimer) Start(db *gorm.DB, harvestClient *HarvestClient) error {
 	}
 
 	// If a harvest task exists start the timer for it
-	if t.harvest != nil {
-		return t.harvest.startTimer(harvestClient)
+	if t.Harvest != nil {
+		return t.Harvest.startTimer(harvestClient)
 	}
 
 	return nil
@@ -76,8 +76,8 @@ func (t *TaskTimer) Stop(db *gorm.DB, harvestClient *HarvestClient) error {
 		return err
 	}
 
-	if t.harvest != nil {
-		return t.harvest.stopTimer(harvestClient)
+	if t.Harvest != nil {
+		return t.Harvest.stopTimer(harvestClient)
 	}
 
 	return nil
@@ -95,14 +95,14 @@ func GetActiveTimers(db *gorm.DB, jiraClient *jira.Client, harvestClient *Harves
 			if err != nil {
 				return nil, err
 			}
-			timer.jira = jira
+			timer.Jira = jira
 		}
 		if harvestClient != nil {
 			harvestTask, err := harvestClient.getUserProjectByKey(timer.Key)
 			if err != nil {
 				return nil, err
 			}
-			timer.harvest = harvestTask
+			timer.Harvest = harvestTask
 		}
 	}
 

@@ -1,0 +1,20 @@
+body {
+    font-family: 'Roboto', sans-serif;
+    color: #ffffff;
+    background: #1A1D21;
+}
+
+.navbar {
+    background-color: #282c2f;
+    height: 30px;
+    padding-left: 0px;
+    padding-right: 3px;
+}
+
+.nav-spacer {
+    margin-top: 10px;
+}
+
+.timer-description {
+    overflow: hidden;
+}
