@@ -2,20 +2,20 @@ package main
 
 import (
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"sort"
 	"time"
 
 	jira "github.com/andygrunwald/go-jira"
-	"github.com/asticode/go-astilectron"
 	"github.com/jinzhu/gorm"
 	"github.com/pkg/errors"
+	"github.com/zserge/lorca"
 )
 
 type harvester struct {
-	app           *astilectron.Astilectron
-	mainWindow    *astilectron.Window
+	mainWindow    lorca.UI
 	settings      Settings
 	changeCh      chan bool
 	db            *gorm.DB
@@ -23,43 +23,39 @@ type harvester struct {
 	harvestClient *HarvestClient
 	harvestURL    *url.URL
 	timers        TaskTimers
+	listener      net.Listener
 }
 
 func NewHarvester(db *gorm.DB) (*harvester, error) {
-	app, err := astilectron.New(astilectron.Options{
-		AppName: "Harvester",
-	})
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, err
+	}
+	defer ln.Close()
+	go http.Serve(ln, http.FileServer(http.Dir("resources")))
+
+	ui, err := lorca.New("", "", 400, 100)
 	if err != nil {
 		return nil, err
 	}
 
 	h := &harvester{
-		app: app,
-		db:  db,
+		mainWindow: ui,
+		db:         db,
 		settings: Settings{
 			RefreshInterval: defaultRefreshInterval,
 			DarkTheme:       true,
 		},
 		changeCh: make(chan bool),
 		timers:   TaskTimers{},
+		listener: ln,
 	}
 
 	if err := h.init(); err != nil {
 		return nil, errors.WithMessage(err, "harvester init error")
 	}
 
-	if err := h.app.Start(); err != nil {
-		return nil, err
-	}
-
-	http.Handle("/resources/", http.StripPrefix("/resources/", http.FileServer(http.Dir("resources"))))
-	go http.ListenAndServe(":46557", nil)
-
-	h.app.HandleSignals()
-
-	if err := h.renderMainWindow(); err != nil {
-		return nil, err
-	}
+	h.renderMainWindow()
 
 	return h, nil
 }
@@ -218,5 +214,5 @@ func (h *harvester) stop() {
 		}
 	}
 
-	h.app.Close()
+	h.mainWindow.Close()
 }

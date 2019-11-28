@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"os"
+	"os/signal"
 	"time"
 
 	"github.com/jinzhu/gorm"
@@ -51,5 +52,10 @@ func main() {
 	go h.start()
 	defer h.stop()
 
-	h.app.Wait()
+	k := make(chan os.Signal)
+	signal.Notify(k, os.Interrupt)
+	select {
+	case <-k:
+	case <-h.mainWindow.Done():
+	}
 }
