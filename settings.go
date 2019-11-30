@@ -13,13 +13,14 @@ type Settings struct {
 	Settings string
 
 	RefreshInterval time.Duration `gorm:"-"`
-	DarkTheme       bool          `gorm:"-"`
-	Jira            SettingsData  `gorm:"-"`
-	Harvest         SettingsData  `gorm:"-"`
+	Jira            SettingsData  `gorm:"-" json:"jira"`
+	Harvest         SettingsData  `gorm:"-" json:"harvest"`
 }
 
 type SettingsData struct {
-	URL, User, Pass string
+	URL  string `json:"url"`
+	User string `json:"user"`
+	Pass string `json:"pass"`
 }
 
 func (s *Settings) Save(db *gorm.DB) error {

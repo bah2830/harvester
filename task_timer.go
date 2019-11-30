@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"time"
 
@@ -15,12 +16,15 @@ var (
 
 type TaskTimer struct {
 	ID        int        `gorm:"primary_key;AUTO_INCREMENT"`
-	Key       string     `gorm:"index:key"`
-	StartedAt time.Time  `gorm:"index:started_at"`
-	StoppedAt *time.Time `gorm:"index:stopped_at;default:NULL"`
+	Key       string     `gorm:"index:key" json:"key"`
+	StartedAt time.Time  `gorm:"index:started_at" json:"startedAt"`
+	StoppedAt *time.Time `gorm:"index:stopped_at;default:NULL" json:"stoppedAt"`
 
-	Jira    *jira.Issue  `gorm:"-"`
-	Harvest *harvestTask `gorm:"-"`
+	Running bool   `gorm:"-" json:"running"`
+	Runtime string `gorm:"-" json:"runtime"`
+
+	Jira    *jira.Issue  `gorm:"-" json:"jira"`
+	Harvest *harvestTask `gorm:"-" json:"harvest"`
 }
 
 type TaskTimers []*TaskTimer
@@ -61,6 +65,9 @@ func (t *TaskTimer) Start(db *gorm.DB, harvestClient *HarvestClient) error {
 		return t.Harvest.startTimer(harvestClient)
 	}
 
+	t.Running = true
+	t.Runtime = t.CurrentRuntime()
+
 	return nil
 }
 
@@ -80,7 +87,22 @@ func (t *TaskTimer) Stop(db *gorm.DB, harvestClient *HarvestClient) error {
 		return t.Harvest.stopTimer(harvestClient)
 	}
 
+	t.Running = false
 	return nil
+}
+
+func (h *harvester) updateTimers(currentRunning string) {
+	for i, task := range h.Timers.Tasks {
+		if task.Key != currentRunning {
+			task.ID = 0
+			task.StartedAt = time.Time{}
+			task.StoppedAt = nil
+		}
+
+		task.Running = task.IsRunning()
+		task.Runtime = task.CurrentRuntime()
+		h.Timers.Tasks[i] = task
+	}
 }
 
 func GetActiveTimers(db *gorm.DB, jiraClient *jira.Client, harvestClient *HarvestClient) (TaskTimers, error) {
@@ -104,6 +126,11 @@ func GetActiveTimers(db *gorm.DB, jiraClient *jira.Client, harvestClient *Harves
 			}
 			timer.Harvest = harvestTask
 		}
+
+		if timer.IsRunning() {
+			timer.Running = true
+			timer.Runtime = timer.CurrentRuntime()
+		}
 	}
 
 	return timers, nil
@@ -115,6 +142,11 @@ func (t *TaskTimer) IsRunning() bool {
 
 func (t *TaskTimer) New() bool {
 	return t.ID == 0
+}
+
+func (t *TaskTimer) CurrentRuntime() string {
+	runTime := time.Since(t.StartedAt)
+	return fmt.Sprintf("%02d:%02.0f", int(runTime.Hours()), runTime.Minutes()-float64(int(runTime.Hours())*60))
 }
 
 // StartJiraPurger will check for old jiras every few hours and purge any that are more than 90 days old

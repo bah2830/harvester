@@ -1,32 +1,8 @@
-PHONY: build package
+PHONY: run bundle_assets
 
-NAME=harvester
-BUILD_PATH=./artifacts/
-ICON_PATH=../icons/icon.png
+run: bundle_assets
+	go run . -db.file harvester.db -debug
 
-package_all: package_darwin package_linux package_windows
+bundle_assets:
+	go-bindata -o assets.go  resources/css/... resources/js/...
 
-package_darwin: build
-	$(eval OS = darwin)
-	$(eval OS_PACKAGE = ${NAME}.app)
-	$(call package)
-
-package_linux: build
-	$(eval OS = linux)
-	$(eval OS_PACKAGE = ${NAME}.tar.gz)
-	$(call package)
-
-package_windows: build
-	$(eval OS = windows)
-	$(eval OS_PACKAGE = ${NAME}.exe)
-	$(call package)
-
-build:
-	go build -o ${BUILD_PATH}${NAME}
-
-generate_icons:
-	fyne bundle -package icons -prefix Resource ./icons > ./icons/icons.go
-
-define package
-	cd artifacts; fyne package -name ${NAME} -executable ${NAME} -os ${OS} -icon ${ICON_PATH}; cd ..
-endef

@@ -21,13 +21,13 @@ type harvestTask struct {
 func (h *harvester) getNewHarvestClient() error {
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{
-			AccessToken: h.settings.Harvest.Pass,
+			AccessToken: h.Settings.Harvest.Pass,
 		},
 	)
 	tc := oauth2.NewClient(context.Background(), ts)
 
 	service := harvest.NewHarvestClient(tc)
-	service.AccountId = h.settings.Harvest.User
+	service.AccountId = h.Settings.Harvest.User
 
 	client := &HarvestClient{
 		HarvestClient: service,

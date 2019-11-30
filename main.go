@@ -18,6 +18,7 @@ const (
 
 var (
 	dbFile = flag.String("db.file", "", "Path to the local database")
+	debug  = flag.Bool("debug", false, "Print debug information")
 )
 
 func main() {
@@ -45,17 +46,19 @@ func main() {
 		log.Fatalln("Migration error", err)
 	}
 
-	h, err := NewHarvester(db)
+	h, err := NewHarvester(db, *debug)
 	if err != nil {
 		log.Fatalln("Unable to get new harvester", err)
 	}
-	go h.start()
-	defer h.stop()
+	go h.Start()
+	defer h.Stop()
 
-	k := make(chan os.Signal)
-	signal.Notify(k, os.Interrupt)
-	select {
-	case <-k:
-	case <-h.mainWindow.Done():
-	}
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	go func() {
+		<-c
+		h.Stop()
+	}()
+
+	h.mainWindow.Run()
 }

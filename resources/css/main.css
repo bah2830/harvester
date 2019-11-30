@@ -2,19 +2,46 @@ body {
     font-family: 'Roboto', sans-serif;
     color: #ffffff;
     background: #1A1D21;
+    margin: 0;
+    padding: 0;
 }
 
 .navbar {
     background-color: #282c2f;
     height: 30px;
     padding-left: 0px;
-    padding-right: 3px;
+    padding-right: 0px;
 }
 
-.nav-spacer {
-    margin-top: 10px;
+#main-content{
+    margin-top: 35px;
+    padding: 3px;
 }
 
 .timer-description {
     overflow: hidden;
+}
+
+.task-timer {
+    height: 40px;
+    border-bottom: 1px solid #06090D;
+}
+
+.task-timer-label {
+    margin-top: 105px;
+}
+
+.btn {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 16px;
+    padding: 2px 10px 2px 10px;
+}
+
+.jira-link {
+    color: #aaa;
+}
+
+.jira-link:hover {
+    color: #ccc;
+    text-decoration: none;
 }

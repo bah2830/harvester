@@ -9,46 +9,48 @@ import (
 	"time"
 
 	jira "github.com/andygrunwald/go-jira"
+	"github.com/bah2830/webview"
 	"github.com/jinzhu/gorm"
 	"github.com/pkg/errors"
-	"github.com/zserge/lorca"
 )
 
 type harvester struct {
-	mainWindow    lorca.UI
-	settings      Settings
-	changeCh      chan bool
-	db            *gorm.DB
-	jiraClient    *jira.Client
-	harvestClient *HarvestClient
-	harvestURL    *url.URL
-	timers        TaskTimers
-	listener      net.Listener
+	mainWindow     webview.WebView
+	aboutWindow    webview.WebView
+	settingsWindow webview.WebView
+	Settings       *Settings `json:"settings"`
+	changeCh       chan bool
+	db             *gorm.DB
+	jiraClient     *jira.Client
+	harvestClient  *HarvestClient
+	harvestURL     *url.URL
+	Timers         *Timers `json:"timers"`
+	listener       net.Listener
+	debug          bool
 }
 
-func NewHarvester(db *gorm.DB) (*harvester, error) {
+type Timers struct {
+	Tasks TaskTimers `json:"tasks"`
+}
+
+func NewHarvester(db *gorm.DB, debug bool) (*harvester, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, err
 	}
-	defer ln.Close()
 	go http.Serve(ln, http.FileServer(http.Dir("resources")))
 
-	ui, err := lorca.New("", "", 400, 100)
-	if err != nil {
-		return nil, err
-	}
-
 	h := &harvester{
-		mainWindow: ui,
-		db:         db,
-		settings: Settings{
+		db: db,
+		Settings: &Settings{
 			RefreshInterval: defaultRefreshInterval,
-			DarkTheme:       true,
 		},
 		changeCh: make(chan bool),
-		timers:   TaskTimers{},
+		Timers: &Timers{
+			Tasks: TaskTimers{},
+		},
 		listener: ln,
+		debug:    debug,
 	}
 
 	if err := h.init(); err != nil {
@@ -60,9 +62,9 @@ func NewHarvester(db *gorm.DB) (*harvester, error) {
 	return h, nil
 }
 
-func (h *harvester) start() {
+func (h *harvester) Start() {
 	// Hold onto the last copy of settings to check for diffs
-	previousSettings := h.settings
+	previousSettings := h.Settings
 
 	// Start the purger to keep the database small
 	go StartJiraPurger(h.db)
@@ -71,39 +73,39 @@ func (h *harvester) start() {
 	for {
 		select {
 		case <-tick.C:
-			if err := h.refresh(); err != nil {
+			if err := h.Refresh(); err != nil {
 				h.sendErr(err)
 			}
 		case <-h.changeCh:
-			if err := h.settings.Save(h.db); err != nil {
+			if err := h.Settings.Save(h.db); err != nil {
 				h.sendErr(err)
 				continue
 			}
 
 			// If refresh interval changed update the ticket
-			if previousSettings.RefreshInterval != h.settings.RefreshInterval {
-				tick = time.NewTicker(h.settings.RefreshInterval)
+			if previousSettings.RefreshInterval != h.Settings.RefreshInterval {
+				tick = time.NewTicker(h.Settings.RefreshInterval)
 			}
 
 			// If the jira credentials changed get a new client
-			if h.settings.Jira.URL != previousSettings.Jira.URL ||
-				h.settings.Jira.User != previousSettings.Jira.User ||
-				h.settings.Jira.Pass != previousSettings.Jira.Pass {
+			if h.Settings.Jira.URL != previousSettings.Jira.URL ||
+				h.Settings.Jira.User != previousSettings.Jira.User ||
+				h.Settings.Jira.Pass != previousSettings.Jira.Pass {
 				if err := h.getNewJiraClient(); err != nil {
 					h.sendErr(err)
 					continue
 				}
 			}
 
-			previousSettings = h.settings
-			if err := h.refresh(); err != nil {
+			previousSettings = h.Settings
+			if err := h.Refresh(); err != nil {
 				h.sendErr(err)
 			}
 		}
 	}
 }
 
-func (h *harvester) refresh() error {
+func (h *harvester) Refresh() error {
 	// Get any current timers running in the local database
 	timers, err := GetActiveTimers(h.db, h.jiraClient, h.harvestClient)
 	if err != nil {
@@ -168,10 +170,10 @@ func (h *harvester) refresh() error {
 	sort.SliceStable(timers, func(a, b int) bool {
 		return sort.StringsAreSorted([]string{timers[a].Key, timers[b].Key})
 	})
-	h.timers = timers
+	h.Timers.Tasks = timers
 
 	if h.mainWindow != nil {
-		h.sendTimers(h.timers)
+		h.sendTimers()
 	}
 
 	return nil
@@ -183,18 +185,18 @@ func (h *harvester) init() error {
 		return errors.WithMessage(err, "error getting settings")
 	}
 	if settings != nil {
-		h.settings = *settings
+		h.Settings = settings
 	}
 
 	// Setup the jira client
-	if h.settings.Jira.URL != "" && h.settings.Jira.User != "" {
+	if h.Settings.Jira.URL != "" && h.Settings.Jira.User != "" {
 		if err := h.getNewJiraClient(); err != nil {
 			return err
 		}
 	}
 
 	// Setup the harvest client
-	if h.settings.Harvest.User != "" && h.settings.Harvest.Pass != "" {
+	if h.Settings.Harvest.User != "" && h.Settings.Harvest.Pass != "" {
 		if err := h.getNewHarvestClient(); err != nil {
 			return err
 		}
@@ -203,16 +205,17 @@ func (h *harvester) init() error {
 	return nil
 }
 
-func (h *harvester) stop() {
-	if err := h.settings.Save(h.db); err != nil {
+func (h *harvester) Stop() {
+	if err := h.Settings.Save(h.db); err != nil {
 		log.Fatal(err)
 	}
 
-	for _, timer := range h.timers {
+	for _, timer := range h.Timers.Tasks {
 		if err := timer.Stop(h.db, h.harvestClient); err != nil {
 			log.Println(err)
 		}
 	}
 
-	h.mainWindow.Close()
+	h.listener.Close()
+	h.mainWindow.Terminate()
 }
