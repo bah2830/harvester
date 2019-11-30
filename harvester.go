@@ -16,7 +16,7 @@ import (
 
 type harvester struct {
 	mainWindow     webview.WebView
-	aboutWindow    webview.WebView
+	infoWindow     webview.WebView
 	settingsWindow webview.WebView
 	Settings       *Settings `json:"settings"`
 	changeCh       chan bool
@@ -217,5 +217,10 @@ func (h *harvester) Stop() {
 	}
 
 	h.listener.Close()
+
+	if h.infoWindow != nil {
+		h.infoWindow.Terminate()
+	}
+
 	h.mainWindow.Terminate()
 }

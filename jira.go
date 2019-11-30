@@ -17,13 +17,6 @@ const (
 		ORDER BY updated DESC, status DESC`
 )
 
-type jiraTime struct {
-	Week      int
-	JiraID    string
-	Durations []time.Duration
-	StartDay  time.Time
-}
-
 func (h *harvester) getNewJiraClient() error {
 	tp := jira.BasicAuthTransport{
 		Username: h.Settings.Jira.User,

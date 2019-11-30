@@ -8,7 +8,7 @@ require (
 	github.com/becoded/go-harvest v0.0.0-20191118150442-2825a596cd0a
 	github.com/golang/protobuf v1.3.1 // indirect
 	github.com/jinzhu/gorm v1.9.11
-	github.com/jinzhu/now v1.1.1 // indirect
+	github.com/jinzhu/now v1.1.1
 	github.com/mattn/go-sqlite3 v1.12.0
 	github.com/pkg/errors v0.8.1
 	github.com/skratchdot/open-golang v0.0.0-20190402232053-79abb63cd66e

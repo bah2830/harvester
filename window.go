@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"strings"
+	"text/template"
 
 	"github.com/bah2830/webview"
 	"github.com/skratchdot/open-golang/open"
@@ -56,10 +57,40 @@ func (h *harvester) renderSettings() {
 	h.settingsWindow = nil
 }
 
+func (h *harvester) renderInfo() {
+	if h.infoWindow != nil {
+		return
+	}
+
+	timesHTML, err := h.getTimeSheetHTML()
+	if err != nil {
+		h.sendErr(err)
+		return
+	}
+
+	h.infoWindow = webview.New(webview.Settings{
+		Title:     "Info",
+		Resizable: false,
+		Height:    500,
+		Width:     600,
+		URL:       "http://" + h.listener.Addr().String() + "/templates/info.html",
+		Debug:     h.debug,
+	})
+
+	h.infoWindow.Dispatch(func() {
+		h.injectDefaults(h.infoWindow)
+		h.infoWindow.Eval("$('#info-container').html('" + template.JSEscapeString(timesHTML) + "')")
+	})
+
+	h.infoWindow.Run()
+	h.infoWindow = nil
+}
+
 func (h *harvester) injectDefaults(w webview.WebView) {
 	w.InjectCSS(string(MustAsset("resources/css/bootstrap/bootstrap.min.css")))
 	w.InjectCSS(string(MustAsset("resources/css/main.css")))
 	w.Eval(string(MustAsset("resources/js/jquery/jquery-3.4.1.min.js")))
+	w.Eval(string(MustAsset("resources/js/bootstrap/bootstrap.bundle.min.js")))
 }
 
 func (h *harvester) handleMainRPC(w webview.WebView, data string) {
@@ -68,6 +99,7 @@ func (h *harvester) handleMainRPC(w webview.WebView, data string) {
 	case data == "refresh":
 		h.Refresh()
 	case data == "info":
+		h.renderInfo()
 	case data == "settings":
 		h.renderSettings()
 	case strings.Contains(data, "|"):

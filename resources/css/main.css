@@ -45,3 +45,16 @@ body {
     color: #ccc;
     text-decoration: none;
 }
+
+table.time-table {
+    width: 100%;
+    padding: 0;
+    margin: 0;
+}
+
+table.time-table td, table.time-table th {
+    color: #aaa;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 2px;
+    background-color: transparent;
+}
