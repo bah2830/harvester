@@ -1,4 +1,4 @@
-package main
+package harvester
 
 import (
 	"encoding/base64"
@@ -6,6 +6,10 @@ import (
 	"time"
 
 	"github.com/jinzhu/gorm"
+)
+
+const (
+	defaultRefreshInterval = 1 * time.Minute
 )
 
 type Settings struct {

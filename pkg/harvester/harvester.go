@@ -1,4 +1,4 @@
-package main
+package harvester
 
 import (
 	"log"
@@ -9,24 +9,25 @@ import (
 	"time"
 
 	jira "github.com/andygrunwald/go-jira"
+	"github.com/bah2830/harvester/pkg/assets"
 	"github.com/bah2830/webview"
 	"github.com/jinzhu/gorm"
 	"github.com/pkg/errors"
 )
 
 type harvester struct {
-	mainWindow     webview.WebView
-	infoWindow     webview.WebView
-	settingsWindow webview.WebView
-	Settings       *Settings `json:"settings"`
-	changeCh       chan bool
-	db             *gorm.DB
-	jiraClient     *jira.Client
-	harvestClient  *HarvestClient
-	harvestURL     *url.URL
-	Timers         *Timers `json:"timers"`
-	listener       net.Listener
-	debug          bool
+	mainWindow      webview.WebView
+	timesheetWindow webview.WebView
+	settingsWindow  webview.WebView
+	Settings        *Settings `json:"settings"`
+	changeCh        chan bool
+	db              *gorm.DB
+	jiraClient      *jira.Client
+	harvestClient   *HarvestClient
+	harvestURL      *url.URL
+	Timers          *Timers `json:"timers"`
+	listener        net.Listener
+	debug           bool
 }
 
 type Timers struct {
@@ -38,7 +39,7 @@ func NewHarvester(db *gorm.DB, debug bool) (*harvester, error) {
 	if err != nil {
 		return nil, err
 	}
-	go http.Serve(ln, http.FileServer(http.Dir("resources")))
+	go http.Serve(ln, http.FileServer(assets.AssetFile()))
 
 	h := &harvester{
 		db: db,
@@ -68,6 +69,10 @@ func (h *harvester) Start() {
 
 	// Start the purger to keep the database small
 	go StartJiraPurger(h.db)
+
+	if err := h.Refresh(); err != nil {
+		h.sendErr(err)
+	}
 
 	tick := time.NewTicker(previousSettings.RefreshInterval)
 	for {
@@ -218,9 +223,15 @@ func (h *harvester) Stop() {
 
 	h.listener.Close()
 
-	if h.infoWindow != nil {
-		h.infoWindow.Terminate()
+	if h.timesheetWindow != nil {
+		h.timesheetWindow.Terminate()
 	}
 
 	h.mainWindow.Terminate()
+}
+
+func (h *harvester) Run() {
+	if h.mainWindow != nil {
+		h.mainWindow.Run()
+	}
 }

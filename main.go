@@ -5,15 +5,14 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"time"
 
+	"github.com/bah2830/harvester/pkg/harvester"
 	"github.com/jinzhu/gorm"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 const (
-	defaultRefreshInterval = 1 * time.Minute
-	version                = "alpha-1"
+	version = "alpha-1"
 )
 
 var (
@@ -42,11 +41,11 @@ func main() {
 	defer db.Close()
 
 	// Build the database schema if needed
-	if err := db.AutoMigrate(&Settings{}, &TaskTimer{}).Error; err != nil {
+	if err := db.AutoMigrate(&harvester.Settings{}, &harvester.TaskTimer{}).Error; err != nil {
 		log.Fatalln("Migration error", err)
 	}
 
-	h, err := NewHarvester(db, *debug)
+	h, err := harvester.NewHarvester(db, *debug)
 	if err != nil {
 		log.Fatalln("Unable to get new harvester", err)
 	}
@@ -60,5 +59,5 @@ func main() {
 		h.Stop()
 	}()
 
-	h.mainWindow.Run()
+	h.Run()
 }

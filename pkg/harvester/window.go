@@ -1,11 +1,11 @@
-package main
+package harvester
 
 import (
 	"encoding/json"
 	"log"
 	"strings"
-	"text/template"
 
+	"github.com/bah2830/harvester/pkg/assets"
 	"github.com/bah2830/webview"
 	"github.com/skratchdot/open-golang/open"
 )
@@ -22,11 +22,8 @@ func (h *harvester) renderMainWindow() {
 	})
 
 	h.mainWindow.Dispatch(func() {
-		h.injectDefaults(h.mainWindow)
-
 		h.mainWindow.Bind("timers", h.Timers)
-		h.mainWindow.Eval(string(MustAsset("resources/js/main.js")))
-		h.mainWindow.Eval("init()")
+		h.injectDefaults(h.mainWindow)
 	})
 }
 
@@ -40,57 +37,62 @@ func (h *harvester) renderSettings() {
 		Resizable:              false,
 		Height:                 500,
 		Width:                  400,
-		URL:                    "http://" + h.listener.Addr().String() + "/templates/settings.html",
+		URL:                    "http://" + h.listener.Addr().String() + "/templates/main.html",
 		ExternalInvokeCallback: h.handleSettingsRPC,
 		Debug:                  h.debug,
 	})
 
 	h.settingsWindow.Dispatch(func() {
-		h.injectDefaults(h.settingsWindow)
-
 		h.settingsWindow.Bind("settings", h.Settings)
-		h.settingsWindow.Eval(string(MustAsset("resources/js/settings.js")))
-		h.settingsWindow.Eval("init()")
+		h.injectDefaults(h.settingsWindow)
 	})
 
 	h.settingsWindow.Run()
 	h.settingsWindow = nil
 }
 
-func (h *harvester) renderInfo() {
-	if h.infoWindow != nil {
+func (h *harvester) renderTimesheet() {
+	if h.timesheetWindow != nil {
 		return
 	}
 
-	timesHTML, err := h.getTimeSheetHTML()
+	timesheet, err := h.getTimeSheet()
 	if err != nil {
 		h.sendErr(err)
 		return
 	}
 
-	h.infoWindow = webview.New(webview.Settings{
-		Title:     "Info",
+	h.timesheetWindow = webview.New(webview.Settings{
+		Title:     "TimeSheet",
 		Resizable: false,
 		Height:    500,
 		Width:     600,
-		URL:       "http://" + h.listener.Addr().String() + "/templates/info.html",
+		URL:       "http://" + h.listener.Addr().String() + "/templates/main.html",
 		Debug:     h.debug,
 	})
 
-	h.infoWindow.Dispatch(func() {
-		h.injectDefaults(h.infoWindow)
-		h.infoWindow.Eval("$('#info-container').html('" + template.JSEscapeString(timesHTML) + "')")
+	h.timesheetWindow.Dispatch(func() {
+		h.settingsWindow.Bind("timesheet", timesheet)
+		h.injectDefaults(h.timesheetWindow)
 	})
 
-	h.infoWindow.Run()
-	h.infoWindow = nil
+	h.timesheetWindow.Run()
+	h.timesheetWindow = nil
 }
 
 func (h *harvester) injectDefaults(w webview.WebView) {
-	w.InjectCSS(string(MustAsset("resources/css/bootstrap/bootstrap.min.css")))
-	w.InjectCSS(string(MustAsset("resources/css/main.css")))
-	w.Eval(string(MustAsset("resources/js/jquery/jquery-3.4.1.min.js")))
-	w.Eval(string(MustAsset("resources/js/bootstrap/bootstrap.bundle.min.js")))
+	w.InjectCSS(string(assets.MustAsset("css/bootstrap/bootstrap.min.css")))
+	w.InjectCSS(string(assets.MustAsset("css/main.css")))
+
+	if h.debug {
+		w.Eval(string(assets.MustAsset("js/react/react.development.js")))
+		w.Eval(string(assets.MustAsset("js/react/react-dom.development.js")))
+	} else {
+		w.Eval(string(assets.MustAsset("js/react/react.min.js")))
+		w.Eval(string(assets.MustAsset("js/react/react-dom.min.js")))
+	}
+
+	w.Eval(string(assets.MustAsset("js/app.js")))
 }
 
 func (h *harvester) handleMainRPC(w webview.WebView, data string) {
@@ -98,8 +100,8 @@ func (h *harvester) handleMainRPC(w webview.WebView, data string) {
 	case data == "copy":
 	case data == "refresh":
 		h.Refresh()
-	case data == "info":
-		h.renderInfo()
+	case data == "timesheet":
+		h.renderTimesheet()
 	case data == "settings":
 		h.renderSettings()
 	case strings.Contains(data, "|"):
@@ -154,6 +156,5 @@ func (h *harvester) sendErr(err error) {
 func (h *harvester) sendTimers() {
 	h.mainWindow.Dispatch(func() {
 		h.mainWindow.Bind("timers", h.Timers)
-		h.mainWindow.Eval("timerUpdate()")
 	})
 }

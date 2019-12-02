@@ -6,6 +6,8 @@ require (
 	github.com/andygrunwald/go-jira v1.11.1
 	github.com/bah2830/webview v0.0.0-20191129182842-0b859130d225
 	github.com/becoded/go-harvest v0.0.0-20191118150442-2825a596cd0a
+	github.com/davecgh/go-spew v1.1.1
+	github.com/elazarl/go-bindata-assetfs v1.0.0 // indirect
 	github.com/golang/protobuf v1.3.1 // indirect
 	github.com/jinzhu/gorm v1.9.11
 	github.com/jinzhu/now v1.1.1
