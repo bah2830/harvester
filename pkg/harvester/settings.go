@@ -17,8 +17,8 @@ type Settings struct {
 	Settings string
 
 	RefreshInterval time.Duration `gorm:"-"`
-	Jira            SettingsData  `gorm:"-" json:"jira"`
-	Harvest         SettingsData  `gorm:"-" json:"harvest"`
+	Jira            *SettingsData `gorm:"-" json:"jira"`
+	Harvest         *SettingsData `gorm:"-" json:"harvest"`
 }
 
 type SettingsData struct {

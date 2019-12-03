@@ -1,11 +1,11 @@
 PHONY: run bundle_assets
 
 install_deps:
-	npm install @babel/core @babel/cli
-	npm install @babel/plugin-transform-react-jsx
+	npm install --dev
+	npm install --prod
 
 compile_jsx:
-	./node_modules/.bin/babel --plugins @babel/plugin-transform-react-jsx react -o resources/js/app.js
+	npm run build
 
 bundle_assets:
 	go-bindata -prefix resources -fs -o pkg/assets/assets.go -pkg assets resources/...

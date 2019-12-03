@@ -1,24 +1,27 @@
 package harvester
 
 import (
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"time"
 
 	jira "github.com/andygrunwald/go-jira"
+	"github.com/asticode/go-astilectron"
 	"github.com/bah2830/harvester/pkg/assets"
-	"github.com/bah2830/webview"
 	"github.com/jinzhu/gorm"
 	"github.com/pkg/errors"
 )
 
 type harvester struct {
-	mainWindow      webview.WebView
-	timesheetWindow webview.WebView
-	settingsWindow  webview.WebView
+	app             *astilectron.Astilectron
+	mainWindow      *astilectron.Window
+	timesheetWindow *astilectron.Window
+	settingsWindow  *astilectron.Window
 	Settings        *Settings `json:"settings"`
 	changeCh        chan bool
 	db              *gorm.DB
@@ -41,8 +44,20 @@ func NewHarvester(db *gorm.DB, debug bool) (*harvester, error) {
 	}
 	go http.Serve(ln, http.FileServer(assets.AssetFile()))
 
+	defaultIcon, darwinIcon := prepareIcons(ln)
+
+	app, err := astilectron.New(astilectron.Options{
+		AppName:            "Harvester",
+		AppIconDefaultPath: defaultIcon,
+		AppIconDarwinPath:  darwinIcon,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	h := &harvester{
-		db: db,
+		app: app,
+		db:  db,
 		Settings: &Settings{
 			RefreshInterval: defaultRefreshInterval,
 		},
@@ -58,7 +73,13 @@ func NewHarvester(db *gorm.DB, debug bool) (*harvester, error) {
 		return nil, errors.WithMessage(err, "harvester init error")
 	}
 
-	h.renderMainWindow()
+	if err := h.app.Start(); err != nil {
+		return nil, err
+	}
+
+	if err := h.renderMainWindow(); err != nil {
+		return nil, err
+	}
 
 	return h, nil
 }
@@ -71,19 +92,21 @@ func (h *harvester) Start() {
 	go StartJiraPurger(h.db)
 
 	if err := h.Refresh(); err != nil {
-		h.sendErr(err)
+		h.sendErr(h.mainWindow, err)
 	}
 
 	tick := time.NewTicker(previousSettings.RefreshInterval)
 	for {
 		select {
+		case <-time.After(30 * time.Second):
+			h.sendTimers(false)
 		case <-tick.C:
 			if err := h.Refresh(); err != nil {
-				h.sendErr(err)
+				h.sendErr(h.mainWindow, err)
 			}
 		case <-h.changeCh:
 			if err := h.Settings.Save(h.db); err != nil {
-				h.sendErr(err)
+				h.sendErr(h.mainWindow, err)
 				continue
 			}
 
@@ -97,14 +120,14 @@ func (h *harvester) Start() {
 				h.Settings.Jira.User != previousSettings.Jira.User ||
 				h.Settings.Jira.Pass != previousSettings.Jira.Pass {
 				if err := h.getNewJiraClient(); err != nil {
-					h.sendErr(err)
+					h.sendErr(h.mainWindow, err)
 					continue
 				}
 			}
 
 			previousSettings = h.Settings
 			if err := h.Refresh(); err != nil {
-				h.sendErr(err)
+				h.sendErr(h.mainWindow, err)
 			}
 		}
 	}
@@ -178,7 +201,7 @@ func (h *harvester) Refresh() error {
 	h.Timers.Tasks = timers
 
 	if h.mainWindow != nil {
-		h.sendTimers()
+		h.sendTimers(true)
 	}
 
 	return nil
@@ -224,14 +247,51 @@ func (h *harvester) Stop() {
 	h.listener.Close()
 
 	if h.timesheetWindow != nil {
-		h.timesheetWindow.Terminate()
+		h.timesheetWindow.Close()
+	}
+	if h.settingsWindow != nil {
+		h.settingsWindow.Close()
 	}
 
-	h.mainWindow.Terminate()
+	h.mainWindow.Close()
+	h.app.Close()
 }
 
-func (h *harvester) Run() {
-	if h.mainWindow != nil {
-		h.mainWindow.Run()
+func (h *harvester) Run() error {
+	h.app.HandleSignals()
+	h.app.Wait()
+	return nil
+}
+
+func prepareIcons(ln net.Listener) (string, string) {
+	var defaultIcon, darwinIcon string
+
+	// Download the icons into the temp dir
+	r, _ := http.Get("http://" + ln.Addr().String() + "/img/icons/icon.png")
+	if r != nil {
+		path := os.TempDir() + "/harvester-icon.png"
+		o, _ := os.Create(path)
+		if o != nil {
+			if _, err := io.Copy(o, r.Body); err == nil {
+				defaultIcon = path
+			}
+			o.Close()
+		}
+		r.Body.Close()
 	}
+
+	r, _ = http.Get("http://" + ln.Addr().String() + "/img/icons/icon.icns")
+	if r != nil {
+		path := os.TempDir() + "/harvester-icon.icns"
+		o, _ := os.Create(path)
+		if o != nil {
+			if _, err := io.Copy(o, r.Body); err == nil {
+				darwinIcon = path
+			}
+			o.Close()
+		}
+		r.Body.Close()
+	}
+
+	return defaultIcon, darwinIcon
 }

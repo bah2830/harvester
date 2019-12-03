@@ -1,14 +1,16 @@
-class Toolbar extends React.Component {
+import React from 'react';
+
+export class Toolbar extends React.Component {
     refresh() {
-        external.invoke('refresh');
+        astilectron.sendMessage("refresh");
     }
 
     settings() {
-        external.invoke('settings');
+        astilectron.sendMessage("settings");
     }
 
     timesheet() {
-        external.invoke('timesheet');
+        astilectron.sendMessage("timesheet");
     }
 
     render() {

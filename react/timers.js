@@ -1,8 +1,10 @@
-class Timers extends React.Component {
+import React from 'react';
+import { Timer } from './timer';
+
+export class Timers extends React.Component {
     render() {
-        var self = this;
         const rows = [];
-        timers.data.tasks.forEach(function (timer, i) {
+        appData.data.timers.tasks.forEach(function (timer, i) {
             rows.push(<Timer key={i} timer={timer} />);
         });
 

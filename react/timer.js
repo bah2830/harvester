@@ -1,4 +1,6 @@
-class Timer extends React.Component {
+import React from 'react';
+
+export class Timer extends React.Component {
     constructor(props) {
         super(props);
 
@@ -8,15 +10,15 @@ class Timer extends React.Component {
     }
 
     stopTimer() {
-        external.invoke("stop|" + this.props.timer.key);
+        astilectron.sendMessage("stop|" + this.props.timer.key);
     }
 
     startTimer() {
-        external.invoke("start|" + this.props.timer.key);
+        astilectron.sendMessage("start|" + this.props.timer.key);
     }
 
     openLink() {
-        external.invoke("start|" + this.props.timer.key);
+        astilectron.sendMessage("open|" + this.props.timer.key);
     }
 
     render() {
@@ -37,18 +39,20 @@ class Timer extends React.Component {
         }
 
         const playImg = '/img/icons/play.png';
+        const stopImg = '/img/icons/stop.png';
         const button = (
             <button
                 type="button"
                 onClick={timer.running ? this.stopTimer : this.startTimer}
                 className="btn btn-dark btn-sm"
             >
-                {timer.running ? timer.runtime : <img src={playImg} height="20px" />}
+                {timer.running ? <img src={stopImg} height="20px" /> : <img src={playImg} height="20px" />}
+                {timer.running && timer.runtime}
             </button >
         )
 
         return (
-            <div className="d-flex flex-row align-middle task-timer">
+            <div className="d-flex flex-row align-middle task-timer align-items-center">
                 <div className="p-1">{icon}</div>
                 <div className="col text-truncate">
                     <a href="#" onClick={this.openLink} className="jira-link">{timer.key}: {description}</a>

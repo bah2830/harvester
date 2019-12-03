@@ -4,7 +4,6 @@ import (
 	"flag"
 	"log"
 	"os"
-	"os/signal"
 
 	"github.com/bah2830/harvester/pkg/harvester"
 	"github.com/jinzhu/gorm"
@@ -52,12 +51,7 @@ func main() {
 	go h.Start()
 	defer h.Stop()
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-	go func() {
-		<-c
-		h.Stop()
-	}()
-
-	h.Run()
+	if err := h.Run(); err != nil {
+		log.Fatalln(err)
+	}
 }

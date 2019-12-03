@@ -1,0 +1,33 @@
+{
+  "name": "harvester",
+  "version": "1.0.0",
+  "description": "Desktop tool for easily tracking harvest hours based on jira tickets. After logging into jira it will constently check for active jiras in the users name and list them on the screen with a start/stop button.",
+  "main": "app.js",
+  "scripts": {
+    "start": "webpack --mode development",
+    "build": "webpack --mode production"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bah2830/harvester.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/bah2830/harvester/issues"
+  },
+  "homepage": "https://github.com/bah2830/harvester#readme",
+  "devDependencies": {
+    "@babel/core": "^7.7.4",
+    "@babel/preset-env": "^7.7.4",
+    "@babel/preset-react": "^7.7.4",
+    "babel-loader": "^8.0.6",
+    "webpack": "^4.41.2",
+    "webpack-cli": "^3.3.10"
+  },
+  "dependencies": {
+    "react": "^16.12.0",
+    "react-dom": "^16.12.0"
+  }
+}
