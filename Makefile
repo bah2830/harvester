@@ -15,3 +15,7 @@ run: compile_jsx bundle_assets
 
 build: compile_jsx bundle_assets
 	go build -o harvester
+
+package:
+	astilectron-bundler -c bundler.config.json -v
+	rm bind_*.go
