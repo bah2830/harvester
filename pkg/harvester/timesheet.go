@@ -1,129 +1,105 @@
 package harvester
 
 import (
+	"math"
 	"sort"
-	"strconv"
 	"time"
-
-	"github.com/jinzhu/now"
 )
 
 type TimeSheet struct {
-	Today []TaskTimeInfo `json:"today"`
-	Week  []TaskTimeInfo `json:"week"`
-	Month []TaskTimeInfo `json:"month"`
+	Tasks     []TaskTimeInfo `json:"tasks"`
+	DaysTotal []float64      `json:"daysTotal"`
+	Total     float64        `json:"total"`
 }
-
 type TaskTimeInfo struct {
-	Week      int             `json:"week"`
-	JiraID    string          `json:"jiraId"`
-	Durations []time.Duration `json:"durations"`
-	StartDay  time.Time       `json:"startDay"`
+	Key       string    `json:"key"`
+	Durations []float64 `json:"durations"`
+	TotalTime float64   `json:"totalTime"`
 }
 
 // viewType can be today, week, month
-func (h *harvester) getTimeSummary(createdAtTime time.Time, viewType string) ([]TaskTimeInfo, error) {
-	var durationDays int
-	switch viewType {
-	case "today":
-		durationDays = 1
-	case "week", "month":
-		durationDays = 7
+func (h *harvester) getTimeSheet(startTime, endTime time.Time) (*TimeSheet, error) {
+	viewType := "day"
+	days := 1
+	if endTime.Sub(startTime).Hours() > 24 {
+		viewType = "week"
+		days = 7
 	}
 
 	var timers []TaskTimer
-	if err := h.db.Where("started_at >= ?", createdAtTime).Order("started_at ASC").Find(&timers).Error; err != nil {
-		return nil, err
+	r := h.db.Where("started_at BETWEEN ? AND ?", startTime, endTime).Find(&timers)
+	if r.Error != nil {
+		return nil, r.Error
 	}
+
+	var total float64
+	daysTotal := make([]float64, days)
 
 	times := make(map[string]TaskTimeInfo, 0)
 	for _, timer := range timers {
 		stoppedDate := time.Now()
 		if timer.StoppedAt != nil {
-			stoppedDate = *timer.StoppedAt
+			stoppedDate = (*timer.StoppedAt).Local()
 		}
 
-		// Build the map key from the id and created week.
-		// This will create one tracker per jira per week
-		mapKey := timer.Key + "-" + strconv.Itoa(week(timer.StartedAt))
-
 		// Find an existing tracker, if none exists create it.
-		jiraTracker, ok := times[mapKey]
+		jiraTracker, ok := times[timer.Key]
 		if !ok {
 			jiraTracker = TaskTimeInfo{
-				JiraID:    timer.Key,
-				Week:      week(timer.StartedAt),
-				StartDay:  createdAtTime,
-				Durations: make([]time.Duration, durationDays),
+				Key:       timer.Key,
+				Durations: make([]float64, days),
 			}
 		}
 
-		day := day(timer.StartedAt, viewType)
-		jiraTracker.Durations[day] = jiraTracker.Durations[day] + stoppedDate.Sub(timer.StartedAt)
-		times[mapKey] = jiraTracker
+		day := day(viewType, timer.StartedAt.Local())
+		runTime := stoppedDate.Sub(timer.StartedAt.Local()).Hours()
+
+		jiraTracker.Durations[day] = jiraTracker.Durations[day] + runTime
+		jiraTracker.TotalTime = jiraTracker.TotalTime + runTime
+
+		daysTotal[day] = daysTotal[day] + runTime
+		total = total + runTime
+
+		times[timer.Key] = jiraTracker
 	}
 
 	// Turn map into slice and sort by the week number
-	var timeSlice []TaskTimeInfo
+	var trackedTasks []TaskTimeInfo
 	for _, j := range times {
-		timeSlice = append(timeSlice, j)
+
+		// Round the durations down to the nearest 100ths
+		j.TotalTime = math.Round(j.TotalTime*100) / 100
+		for i := range j.Durations {
+			j.Durations[i] = math.Round(j.Durations[i]*100) / 100
+		}
+
+		trackedTasks = append(trackedTasks, j)
 	}
-	sort.Slice(timeSlice, func(a, b int) bool {
-		return timeSlice[a].Week < timeSlice[b].Week
+	sort.Slice(trackedTasks, func(a, b int) bool {
+		return trackedTasks[a].Key < trackedTasks[b].Key
 	})
 
-	return timeSlice, nil
+	for i := range daysTotal {
+		daysTotal[i] = math.Round(daysTotal[i]*100) / 100
+	}
+
+	return &TimeSheet{
+		Tasks:     trackedTasks,
+		DaysTotal: daysTotal,
+		Total:     math.Round(total*100) / 100,
+	}, nil
 }
 
-func week(date time.Time) int {
-	beginningOfTheMonth := now.BeginningOfMonth()
-	_, thisWeek := date.ISOWeek()
-	_, beginningWeek := beginningOfTheMonth.ISOWeek()
-	return 1 + thisWeek - beginningWeek
-}
+func day(view string, date time.Time) int {
+	if view == "day" {
+		return 0
+	}
 
-func day(date time.Time, viewType string) int {
-	var day int
-	switch viewType {
-	case "today":
-		day = 0
-	case "week", "month":
-		// Shift the days back 1 so that the week starts on Monday
-		day = int(date.Weekday()) - 1
-		if day < 0 {
-			day = 6
-		}
+	// Shift the days back 1 so that the week starts on Monday
+	day := int(date.Weekday()) - 1
+	if day < 0 {
+		day = 6
 	}
 
 	return day
-}
-
-func (h *harvester) getTimeSheet() (*TimeSheet, error) {
-	views := []struct {
-		name string
-		date time.Time
-	}{
-		{name: "today", date: now.BeginningOfDay()},
-		{name: "week", date: now.BeginningOfWeek()},
-		{name: "month", date: now.BeginningOfMonth()},
-	}
-
-	timesheet := &TimeSheet{}
-	for _, view := range views {
-		times, err := h.getTimeSummary(view.date, view.name)
-		if err != nil {
-			return nil, err
-		}
-
-		switch view.name {
-		case "today":
-			timesheet.Today = times
-		case "week":
-			timesheet.Week = times
-		case "month":
-			timesheet.Month = times
-		}
-
-	}
-	return timesheet, nil
 }

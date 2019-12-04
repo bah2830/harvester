@@ -4,7 +4,7 @@
   "description": "Desktop tool for easily tracking harvest hours based on jira tickets. After logging into jira it will constently check for active jiras in the users name and list them on the screen with a start/stop button.",
   "main": "app.js",
   "scripts": {
-    "start": "webpack --mode development",
+    "debug": "webpack --mode development",
     "build": "webpack --mode production"
   },
   "repository": {

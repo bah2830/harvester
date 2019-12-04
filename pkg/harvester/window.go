@@ -5,23 +5,46 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/asticode/go-astilectron"
 	astiptr "github.com/asticode/go-astitools/ptr"
+	"github.com/jinzhu/now"
 	"github.com/skratchdot/open-golang/open"
 )
 
 type AppData struct {
-	View      string     `json:"view"`
-	Timers    *Timers    `json:"timers"`
-	Settings  *Settings  `json:"settings"`
-	Timesheet *TimeSheet `json:"timesheet"`
-	Error     string     `json:"error"`
+	View     string    `json:"view"`
+	Timers   *Timers   `json:"timers"`
+	Settings *Settings `json:"settings"`
+	Error    string    `json:"error"`
+}
+
+func (h *harvester) getWindow(opts *astilectron.WindowOptions) (*astilectron.Window, error) {
+
+	displays := h.app.Displays()
+	display := displays[0]
+	for _, d := range displays {
+		if d.Size().Height == 1080 && d.WorkArea().Position.X == -1920 {
+			display = d
+			break
+		}
+	}
+
+	w, err := h.app.NewWindowInDisplay(
+		display,
+		"http://"+h.listener.Addr().String()+"/templates/main.html",
+		opts,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return w, err
 }
 
 func (h *harvester) renderMainWindow() error {
-	w, err := h.app.NewWindow(
-		"http://"+h.listener.Addr().String()+"/templates/main.html",
+	w, err := h.getWindow(
 		&astilectron.WindowOptions{
 			Title:           astiptr.Str("Harvester"),
 			Height:          astiptr.Int(200),
@@ -58,8 +81,7 @@ func (h *harvester) renderMainWindow() error {
 
 func (h *harvester) renderSettings() error {
 	if h.settingsWindow == nil || h.settingsWindow.IsDestroyed() {
-		w, err := h.app.NewWindow(
-			"http://"+h.listener.Addr().String()+"/templates/main.html",
+		w, err := h.getWindow(
 			&astilectron.WindowOptions{
 				Title:           astiptr.Str("Settings"),
 				Height:          astiptr.Int(500),
@@ -96,32 +118,40 @@ func (h *harvester) renderSettings() error {
 }
 
 func (h *harvester) renderTimesheet() error {
-	if h.timesheetWindow != nil {
-		return nil
+	if h.timesheetWindow == nil || h.timesheetWindow.IsDestroyed() {
+		w, err := h.getWindow(
+			&astilectron.WindowOptions{
+				Title:           astiptr.Str("TimeSheet"),
+				Height:          astiptr.Int(500),
+				Width:           astiptr.Int(600),
+				BackgroundColor: astiptr.Str("#1A1D21"),
+				Resizable:       astiptr.Bool(false),
+			},
+		)
+		if err != nil {
+			return err
+		}
+
+		h.timesheetWindow = w
 	}
 
-	// timesheet, err := h.getTimeSheet()
-	// if err != nil {
-	// 	h.sendErr(err)
-	// 	return
-	// }
+	if err := h.timesheetWindow.Create(); err != nil {
+		return err
+	}
 
-	// h.timesheetWindow = webview.New(webview.Settings{
-	// 	Title:     "TimeSheet",
-	// 	Resizable: false,
-	// 	Height:    500,
-	// 	Width:     600,
-	// 	URL:       "http://" + h.listener.Addr().String() + "/templates/main.html",
-	// 	Debug:     h.debug,
-	// })
+	if h.debug {
+		if err := h.timesheetWindow.OpenDevTools(); err != nil {
+			return err
+		}
+	}
 
-	// h.timesheetWindow.Dispatch(func() {
-	// 	h.settingsWindow.Bind("timesheet", timesheet)
-	// 	h.injectDefaults(h.timesheetWindow)
-	// })
+	ready := make(chan bool)
+	h.timeoutListener(ready)
+	go func() {
+		<-ready
+		h.timesheetWindow.SendMessage(AppData{View: "timesheet"})
+	}()
 
-	// h.timesheetWindow.Run()
-	// h.timesheetWindow = nil
 	return nil
 }
 
@@ -208,6 +238,30 @@ func (h *harvester) settingsListener(ready chan bool) {
 		h.changeCh <- true
 
 		return nil
+	})
+}
+
+func (h *harvester) timeoutListener(ready chan bool) {
+	h.timesheetWindow.OnMessage(func(m *astilectron.EventMessage) interface{} {
+		var data string
+		m.Unmarshal(&data)
+
+		var start, end time.Time
+		switch data {
+		case "ready":
+			ready <- true
+		case "day":
+			start, end = now.BeginningOfDay(), now.EndOfDay()
+		case "week":
+			start, end = now.BeginningOfMonth(), now.EndOfMonth()
+		}
+
+		timesheet, err := h.getTimeSheet(start.UTC(), end.UTC())
+		if err != nil {
+			h.sendErr(h.timesheetWindow, err)
+			return nil
+		}
+		return timesheet
 	})
 }
 

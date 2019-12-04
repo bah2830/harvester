@@ -7,10 +7,13 @@ install_deps:
 compile_jsx:
 	npm run build
 
-bundle_assets:
-	go-bindata -prefix resources -fs -o pkg/assets/assets.go -pkg assets resources/...
+compile_jsx_dev:
+	npm run debug
 
-run: compile_jsx bundle_assets
+bundle_assets:
+	go-bindata -prefix resources -fs -o pkg/assets/assets.go -pkg assets -ignore DS_Store resources/...
+
+run: compile_jsx_dev bundle_assets
 	go run . -db.file harvester.db -debug
 
 build: compile_jsx bundle_assets

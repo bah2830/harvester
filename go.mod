@@ -3,13 +3,10 @@ module github.com/bah2830/harvester
 go 1.13
 
 require (
-	github.com/akavel/rsrc v0.8.0 // indirect
 	github.com/andygrunwald/go-jira v1.11.1
 	github.com/asticode/go-astilectron v0.9.0
-	github.com/asticode/go-astilectron-bundler v0.0.0-20191123091146-1e88e96e06a9 // indirect
 	github.com/asticode/go-astilog v1.1.0 // indirect
 	github.com/asticode/go-astitools v1.2.0
-	github.com/asticode/go-bindata v0.0.0-20151023091102-a0ff2567cfb7 // indirect
 	github.com/becoded/go-harvest v0.0.0-20191118150442-2825a596cd0a
 	github.com/golang/protobuf v1.3.1 // indirect
 	github.com/jinzhu/gorm v1.9.11
@@ -20,7 +17,6 @@ require (
 	github.com/mattn/go-isatty v0.0.10 // indirect
 	github.com/mattn/go-sqlite3 v1.12.0
 	github.com/pkg/errors v0.8.1
-	github.com/sam-kamerer/go-plister v1.2.0 // indirect
 	github.com/sirupsen/logrus v1.4.2 // indirect
 	github.com/skratchdot/open-golang v0.0.0-20190402232053-79abb63cd66e
 	golang.org/x/crypto v0.0.0-20191202143827-86a70503ff7e // indirect

@@ -44,7 +44,7 @@ export class Timer extends React.Component {
             <button
                 type="button"
                 onClick={timer.running ? this.stopTimer : this.startTimer}
-                className="btn btn-dark btn-sm"
+                className="btn btn-dark btn-sm timer-btn"
             >
                 {timer.running ? <img src={stopImg} height="20px" /> : <img src={playImg} height="20px" />}
                 {timer.running && timer.runtime}
