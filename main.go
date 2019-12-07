@@ -4,16 +4,14 @@ import (
 	"flag"
 	"log"
 	"os"
-	"os/signal"
-	"time"
 
+	"github.com/bah2830/harvester/pkg/harvester"
 	"github.com/jinzhu/gorm"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 const (
-	defaultRefreshInterval = 1 * time.Minute
-	version                = "alpha-1"
+	version = "alpha-1"
 )
 
 var (
@@ -41,25 +39,18 @@ func main() {
 	defer db.Close()
 
 	// Build the database schema if needed
-	if err := db.AutoMigrate(&Settings{}, &TaskTimer{}).Error; err != nil {
+	if err := db.AutoMigrate(&harvester.Settings{}, &harvester.TaskTimer{}).Error; err != nil {
 		log.Fatalln("Migration error", err)
 	}
 
-	h, err := NewHarvester(db)
+	h, err := harvester.NewHarvester(db)
 	if err != nil {
 		log.Fatalln("Unable to get new harvester", err)
 	}
-	go h.start()
-	defer h.stop()
+	go h.Start()
+	defer h.Stop()
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-	go func() {
-		<-c
-		log.Println("received kill signal, exiting")
-		h.stop()
-		os.Exit(0)
-	}()
-
-	h.app.Run()
+	if err := h.Run(); err != nil {
+		log.Fatalln(err)
+	}
 }

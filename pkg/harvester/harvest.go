@@ -1,4 +1,4 @@
-package main
+package harvester
 
 import (
 	"context"
@@ -21,13 +21,13 @@ type harvestTask struct {
 func (h *harvester) getNewHarvestClient() error {
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{
-			AccessToken: h.settings.Harvest.Pass,
+			AccessToken: h.Settings.Harvest.Pass,
 		},
 	)
 	tc := oauth2.NewClient(context.Background(), ts)
 
 	service := harvest.NewHarvestClient(tc)
-	service.AccountId = h.settings.Harvest.User
+	service.AccountId = h.Settings.Harvest.User
 
 	client := &HarvestClient{
 		HarvestClient: service,
@@ -58,13 +58,17 @@ func (c *HarvestClient) getUserProjects() ([]*harvestTask, error) {
 		return nil, err
 	}
 
-	tasks := make([]*harvestTask, len(asignments.UserAssignments))
-	for i, a := range asignments.UserAssignments {
+	tasks := make([]*harvestTask, 0)
+	for _, a := range asignments.UserAssignments {
+		if *a.IsProjectManager == false {
+			continue
+		}
+
 		task := &harvestTask{
 			UserProjectAssignment: *a,
 		}
 
-		tasks[i] = task
+		tasks = append(tasks, task)
 	}
 
 	timers, err := c.getTimers()

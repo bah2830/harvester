@@ -1,0 +1,77 @@
+body {
+    font-family: 'Roboto', sans-serif;
+    font-size: 15px;
+    color: #bcbebf;
+    background: #1A1D21;
+    margin: 0;
+    padding: 0;
+}
+
+.navbar {
+    background-color: #282c2f;
+    height: 30px;
+    padding-left: 0px;
+    padding-right: 0px;
+}
+
+#main-content, #error-content {
+    margin-top: 35px;
+    padding: 3px;
+}
+
+.timer-description {
+    overflow: hidden;
+}
+
+.task-timer {
+    height: 40px;
+    border-bottom: 1px solid #23262a;
+}
+
+.task-timer-label {
+    margin-top: 105px;
+}
+
+.timer-btn {
+    background-color: #292c2f;
+    border: 1px solid #101114;
+}
+
+.btn {
+    color: #bcbebf;
+    font-size: 14px;
+    padding: 2px 6px 2px 6px;
+    border-radius: 0px;
+}
+
+.jira-link {
+    color: #aaa;
+}
+
+.jira-link:hover {
+    color: #ccc;
+    text-decoration: none;
+}
+
+table.time-table {
+    width: 100%;
+    padding: 0;
+    margin: 0;
+}
+
+table.time-table td, table.time-table th {
+    color: #bcbebf;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 2px;
+    background-color: transparent;
+}
+
+#settings-container {
+    padding: 10px;
+}
+
+.timesheet {
+    width: 100%;
+    padding: 5px;
+    margin: 0;
+}

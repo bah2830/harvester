@@ -1,4 +1,4 @@
-package main
+package harvester
 
 import (
 	"encoding/base64"
@@ -8,18 +8,23 @@ import (
 	"github.com/jinzhu/gorm"
 )
 
+const (
+	defaultRefreshInterval = 1 * time.Minute
+)
+
 type Settings struct {
 	ID       int `gorm:"primary_key;AUTO_INCREMENT"`
 	Settings string
 
 	RefreshInterval time.Duration `gorm:"-"`
-	DarkTheme       bool          `gorm:"-"`
-	Jira            SettingsData  `gorm:"-"`
-	Harvest         SettingsData  `gorm:"-"`
+	Jira            *SettingsData `gorm:"-" json:"jira"`
+	Harvest         *SettingsData `gorm:"-" json:"harvest"`
 }
 
 type SettingsData struct {
-	URL, User, Pass string
+	URL  string `json:"url"`
+	User string `json:"user"`
+	Pass string `json:"pass"`
 }
 
 func (s *Settings) Save(db *gorm.DB) error {

@@ -1,4 +1,4 @@
-package main
+package harvester
 
 import (
 	"errors"
@@ -17,24 +17,17 @@ const (
 		ORDER BY updated DESC, status DESC`
 )
 
-type jiraTime struct {
-	Week      int
-	JiraID    string
-	Durations []time.Duration
-	StartDay  time.Time
-}
-
 func (h *harvester) getNewJiraClient() error {
 	tp := jira.BasicAuthTransport{
-		Username: h.settings.Jira.User,
-		Password: h.settings.Jira.Pass,
+		Username: h.Settings.Jira.User,
+		Password: h.Settings.Jira.Pass,
 		Transport: &http.Transport{DialContext: (&net.Dialer{
 			Timeout: 10 * time.Second,
 		}).DialContext,
 		},
 	}
 
-	jiraClient, err := jira.NewClient(tp.Client(), h.settings.Jira.URL)
+	jiraClient, err := jira.NewClient(tp.Client(), h.Settings.Jira.URL)
 	if err != nil {
 		return err
 	}

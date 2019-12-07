@@ -1,32 +1,24 @@
-PHONY: build package
+PHONY: run bundle_assets
 
-NAME=harvester
-BUILD_PATH=./artifacts/
-ICON_PATH=../icons/icon.png
+install_deps:
+	npm install --dev
+	npm install --prod
 
-package_all: package_darwin package_linux package_windows
+compile_jsx:
+	npm run build
 
-package_darwin: build
-	$(eval OS = darwin)
-	$(eval OS_PACKAGE = ${NAME}.app)
-	$(call package)
+compile_jsx_dev:
+	npm run debug
 
-package_linux: build
-	$(eval OS = linux)
-	$(eval OS_PACKAGE = ${NAME}.tar.gz)
-	$(call package)
+bundle_assets:
+	go-bindata -prefix resources -fs -o pkg/assets/assets.go -pkg assets -ignore DS_Store resources/...
 
-package_windows: build
-	$(eval OS = windows)
-	$(eval OS_PACKAGE = ${NAME}.exe)
-	$(call package)
+run: compile_jsx_dev bundle_assets
+	go run . -db.file harvester.db
 
-build:
-	go build -o ${BUILD_PATH}${NAME}
+build: compile_jsx bundle_assets
+	go build -o harvester
 
-generate_icons:
-	fyne bundle -package icons -prefix Resource ./icons > ./icons/icons.go
-
-define package
-	cd artifacts; fyne package -name ${NAME} -executable ${NAME} -os ${OS} -icon ${ICON_PATH}; cd ..
-endef
+package:
+	astilectron-bundler -c bundler.config.json -v
+	rm bind_*.go

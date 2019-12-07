@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+    <head>
+            <link href="/fonts/Roboto-Regular.ttf">
+            <link rel="stylesheet" href="/css/bootstrap/bootstrap.min.css">
+            <link rel="stylesheet" href="/css/main.css">
+    </head>
+    <body>
+        <div id="app"></div>
+
+        <script type="text/javascript">
+            let appData = {
+                data: {}
+            };
+            document.addEventListener('astilectron-ready', function() {
+                astilectron.onMessage(function (message) {
+                    console.log("got message from backend, type: " + message.view);
+                    appData.data = message;
+                    appData.render();
+                });
+
+                astilectron.sendMessage("ready");
+            });
+        </script>
+
+        <script src="/js/app.js"></script>
+    </body>
+</html>
