@@ -16,12 +16,7 @@
                 astilectron.onMessage(function (message) {
                     console.log("got message from backend, type: " + message.view);
                     appData.data = message;
-
-                    if (appData.data.view != "error") {
-                        appData.render();
-                    } else {
-                        astilectron.showErrorBox("Error", appData.data.error)
-                    }
+                    appData.render();
                 });
 
                 astilectron.sendMessage("ready");

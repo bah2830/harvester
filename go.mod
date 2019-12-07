@@ -7,6 +7,7 @@ require (
 	github.com/asticode/go-astilectron v0.9.0
 	github.com/asticode/go-astilog v1.1.0 // indirect
 	github.com/asticode/go-astitools v1.2.0
+	github.com/atotto/clipboard v0.1.2
 	github.com/becoded/go-harvest v0.0.0-20191118150442-2825a596cd0a
 	github.com/golang/protobuf v1.3.1 // indirect
 	github.com/jinzhu/gorm v1.9.11

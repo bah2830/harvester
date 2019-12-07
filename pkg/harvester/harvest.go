@@ -58,13 +58,17 @@ func (c *HarvestClient) getUserProjects() ([]*harvestTask, error) {
 		return nil, err
 	}
 
-	tasks := make([]*harvestTask, len(asignments.UserAssignments))
-	for i, a := range asignments.UserAssignments {
+	tasks := make([]*harvestTask, 0)
+	for _, a := range asignments.UserAssignments {
+		if *a.IsProjectManager == false {
+			continue
+		}
+
 		task := &harvestTask{
 			UserProjectAssignment: *a,
 		}
 
-		tasks[i] = task
+		tasks = append(tasks, task)
 	}
 
 	timers, err := c.getTimers()

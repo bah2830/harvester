@@ -7,6 +7,8 @@ import (
 )
 
 type TimeSheet struct {
+	TimeStart time.Time      `json:"timeStart"`
+	TimeEnd   time.Time      `json:"timeEnd"`
 	Tasks     []TaskTimeInfo `json:"tasks"`
 	DaysTotal []float64      `json:"daysTotal"`
 	Total     float64        `json:"total"`
@@ -64,9 +66,8 @@ func (h *harvester) getTimeSheet(startTime, endTime time.Time) (*TimeSheet, erro
 	}
 
 	// Turn map into slice and sort by the week number
-	var trackedTasks []TaskTimeInfo
+	trackedTasks := make([]TaskTimeInfo, 0)
 	for _, j := range times {
-
 		// Round the durations down to the nearest 100ths
 		j.TotalTime = math.Round(j.TotalTime*100) / 100
 		for i := range j.Durations {
@@ -87,6 +88,8 @@ func (h *harvester) getTimeSheet(startTime, endTime time.Time) (*TimeSheet, erro
 		Tasks:     trackedTasks,
 		DaysTotal: daysTotal,
 		Total:     math.Round(total*100) / 100,
+		TimeStart: startTime,
+		TimeEnd:   endTime,
 	}, nil
 }
 

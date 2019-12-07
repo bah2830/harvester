@@ -9,9 +9,16 @@ import (
 
 	"github.com/asticode/go-astilectron"
 	astiptr "github.com/asticode/go-astitools/ptr"
+	"github.com/atotto/clipboard"
 	"github.com/jinzhu/now"
 	"github.com/skratchdot/open-golang/open"
 )
+
+type Window struct {
+	*astilectron.Window
+	View        string
+	CurrentData *AppData
+}
 
 type AppData struct {
 	View     string    `json:"view"`
@@ -20,12 +27,11 @@ type AppData struct {
 	Error    string    `json:"error"`
 }
 
-func (h *harvester) getWindow(opts *astilectron.WindowOptions) (*astilectron.Window, error) {
-
+func (h *harvester) getWindow(view string, opts *astilectron.WindowOptions) (*Window, error) {
 	displays := h.app.Displays()
 	display := displays[0]
 	for _, d := range displays {
-		if d.Size().Height == 1080 && d.WorkArea().Position.X == -1920 {
+		if d.Size().Height == 1080 {
 			display = d
 			break
 		}
@@ -40,16 +46,17 @@ func (h *harvester) getWindow(opts *astilectron.WindowOptions) (*astilectron.Win
 		return nil, err
 	}
 
-	return w, err
+	return &Window{Window: w, View: view}, err
 }
 
 func (h *harvester) renderMainWindow() error {
 	w, err := h.getWindow(
+		"main",
 		&astilectron.WindowOptions{
 			Title:           astiptr.Str("Harvester"),
 			Height:          astiptr.Int(200),
 			MinHeight:       astiptr.Int(100),
-			Width:           astiptr.Int(400),
+			Width:           astiptr.Int(350),
 			MinWidth:        astiptr.Int(300),
 			BackgroundColor: astiptr.Str("#1A1D21"),
 		},
@@ -73,7 +80,7 @@ func (h *harvester) renderMainWindow() error {
 	h.mainListener(ready)
 	go func() {
 		<-ready
-		h.mainWindow.SendMessage(AppData{View: "main"})
+		h.mainWindow.sendMessage(&AppData{})
 	}()
 
 	return nil
@@ -82,9 +89,10 @@ func (h *harvester) renderMainWindow() error {
 func (h *harvester) renderSettings() error {
 	if h.settingsWindow == nil || h.settingsWindow.IsDestroyed() {
 		w, err := h.getWindow(
+			"settings",
 			&astilectron.WindowOptions{
 				Title:           astiptr.Str("Settings"),
-				Height:          astiptr.Int(500),
+				Height:          astiptr.Int(565),
 				Width:           astiptr.Int(400),
 				BackgroundColor: astiptr.Str("#1A1D21"),
 				Resizable:       astiptr.Bool(false),
@@ -111,7 +119,7 @@ func (h *harvester) renderSettings() error {
 	h.settingsListener(ready)
 	go func() {
 		<-ready
-		h.settingsWindow.SendMessage(AppData{View: "settings", Settings: h.Settings})
+		h.settingsWindow.sendMessage(&AppData{Settings: h.Settings})
 	}()
 
 	return nil
@@ -120,6 +128,7 @@ func (h *harvester) renderSettings() error {
 func (h *harvester) renderTimesheet() error {
 	if h.timesheetWindow == nil || h.timesheetWindow.IsDestroyed() {
 		w, err := h.getWindow(
+			"timesheet",
 			&astilectron.WindowOptions{
 				Title:           astiptr.Str("TimeSheet"),
 				Height:          astiptr.Int(500),
@@ -146,10 +155,10 @@ func (h *harvester) renderTimesheet() error {
 	}
 
 	ready := make(chan bool)
-	h.timeoutListener(ready)
+	h.timesheetListener(ready)
 	go func() {
 		<-ready
-		h.timesheetWindow.SendMessage(AppData{View: "timesheet"})
+		h.timesheetWindow.sendMessage(&AppData{})
 	}()
 
 	return nil
@@ -181,6 +190,13 @@ func (h *harvester) mainListener(ready chan bool) {
 			if err := h.renderSettings(); err != nil {
 				h.sendErr(h.mainWindow, err)
 				return err
+			}
+		case data == "harvest":
+			if h.harvestURL != nil {
+				if err := open.Run(h.harvestURL.String()); err != nil {
+					h.sendErr(h.mainWindow, err)
+					return err
+				}
 			}
 		case strings.Contains(data, "|"):
 			parts := strings.Split(data, "|")
@@ -241,19 +257,62 @@ func (h *harvester) settingsListener(ready chan bool) {
 	})
 }
 
-func (h *harvester) timeoutListener(ready chan bool) {
+func (h *harvester) timesheetListener(ready chan bool) {
 	h.timesheetWindow.OnMessage(func(m *astilectron.EventMessage) interface{} {
 		var data string
 		m.Unmarshal(&data)
 
 		var start, end time.Time
-		switch data {
-		case "ready":
+		switch {
+		case data == "ready":
 			ready <- true
-		case "day":
-			start, end = now.BeginningOfDay(), now.EndOfDay()
-		case "week":
-			start, end = now.BeginningOfMonth(), now.EndOfMonth()
+		default:
+			now.WeekStartDay = time.Monday
+
+			parts := strings.Split(data, "|")
+			if len(parts) < 3 {
+				return nil
+			}
+
+			var startTime time.Time
+			var err error
+			if parts[2] != "=" {
+				startTime, err = time.Parse("2006-01-02T15:04:05Z", parts[1])
+				if err != nil {
+					h.sendErr(h.timesheetWindow, err)
+					return nil
+				}
+			}
+
+			addDuration := 24 * time.Hour
+			if parts[0] == "week" {
+				addDuration = 24 * 7 * time.Hour
+			}
+
+			switch parts[2] {
+			case "=":
+				start = now.BeginningOfDay()
+				if parts[0] == "week" {
+					start = now.BeginningOfWeek()
+				}
+			case "-":
+				start = startTime.Add(-addDuration)
+			case "+":
+				start = startTime.Add(addDuration)
+			case "copy":
+				start = now.With(startTime).BeginningOfMonth()
+				end = now.With(startTime).EndOfMonth()
+				keys, err := GetKeysWithTimes(h.db, start, end)
+				if err != nil {
+					h.sendErr(h.timesheetWindow, err)
+					return nil
+				}
+
+				clipboard.WriteAll(strings.Join(keys, "\n"))
+				return nil
+			}
+
+			end = start.Add(addDuration - 1*time.Minute)
 		}
 
 		timesheet, err := h.getTimeSheet(start.UTC(), end.UTC())
@@ -265,13 +324,15 @@ func (h *harvester) timeoutListener(ready chan bool) {
 	})
 }
 
-func (h *harvester) sendErr(w *astilectron.Window, err error) {
+func (h *harvester) sendErr(w *Window, err error) {
 	fmt.Println(err)
-	w.SendMessage(AppData{View: "error", Error: err.Error()})
+	current := *w.CurrentData
+	current.Error = err.Error()
+	w.SendMessage(current)
 }
 
 func (h *harvester) sendTimers(auto bool) {
-	h.mainWindow.SendMessage(AppData{View: "main", Timers: h.Timers})
+	h.mainWindow.sendMessage(&AppData{Timers: h.Timers})
 
 	// Change the height of the window to match the number of timers
 	if auto {
@@ -282,4 +343,10 @@ func (h *harvester) sendTimers(auto bool) {
 			},
 		})
 	}
+}
+
+func (w *Window) sendMessage(message *AppData) {
+	message.View = w.View
+	w.CurrentData = message
+	w.SendMessage(message)
 }

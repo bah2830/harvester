@@ -12,6 +12,7 @@ import (
 
 	jira "github.com/andygrunwald/go-jira"
 	"github.com/asticode/go-astilectron"
+	astiptr "github.com/asticode/go-astitools/ptr"
 	"github.com/bah2830/harvester/pkg/assets"
 	"github.com/jinzhu/gorm"
 	"github.com/pkg/errors"
@@ -19,9 +20,10 @@ import (
 
 type harvester struct {
 	app             *astilectron.Astilectron
-	mainWindow      *astilectron.Window
-	timesheetWindow *astilectron.Window
-	settingsWindow  *astilectron.Window
+	menu            *astilectron.Menu
+	mainWindow      *Window
+	timesheetWindow *Window
+	settingsWindow  *Window
 	Settings        *Settings `json:"settings"`
 	changeCh        chan bool
 	db              *gorm.DB
@@ -37,19 +39,20 @@ type Timers struct {
 	Tasks TaskTimers `json:"tasks"`
 }
 
-func NewHarvester(db *gorm.DB, debug bool) (*harvester, error) {
+func NewHarvester(db *gorm.DB) (*harvester, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, err
 	}
 	go http.Serve(ln, http.FileServer(assets.AssetFile()))
 
-	defaultIcon, darwinIcon := prepareIcons(ln)
+	defaultIcon, darwinIcon, trayIcon := prepareIcons(ln)
 
 	app, err := astilectron.New(astilectron.Options{
 		AppName:            "Harvester",
 		AppIconDefaultPath: defaultIcon,
 		AppIconDarwinPath:  darwinIcon,
+		DataDirectoryPath:  "./electron",
 	})
 	if err != nil {
 		return nil, err
@@ -66,7 +69,6 @@ func NewHarvester(db *gorm.DB, debug bool) (*harvester, error) {
 			Tasks: TaskTimers{},
 		},
 		listener: ln,
-		debug:    debug,
 	}
 
 	if err := h.init(); err != nil {
@@ -76,6 +78,8 @@ func NewHarvester(db *gorm.DB, debug bool) (*harvester, error) {
 	if err := h.app.Start(); err != nil {
 		return nil, err
 	}
+
+	h.createMenu(trayIcon)
 
 	if err := h.renderMainWindow(); err != nil {
 		return nil, err
@@ -233,15 +237,22 @@ func (h *harvester) init() error {
 	return nil
 }
 
+func (h *harvester) stopAllTimers() error {
+	for _, timer := range h.Timers.Tasks {
+		if err := timer.Stop(h.db, h.harvestClient); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (h *harvester) Stop() {
 	if err := h.Settings.Save(h.db); err != nil {
 		log.Fatal(err)
 	}
 
-	for _, timer := range h.Timers.Tasks {
-		if err := timer.Stop(h.db, h.harvestClient); err != nil {
-			log.Println(err)
-		}
+	if err := h.stopAllTimers(); err != nil {
+		log.Fatal(err)
 	}
 
 	h.listener.Close()
@@ -263,9 +274,7 @@ func (h *harvester) Run() error {
 	return nil
 }
 
-func prepareIcons(ln net.Listener) (string, string) {
-	var defaultIcon, darwinIcon string
-
+func prepareIcons(ln net.Listener) (defaultIcon string, darwinIcon string, trayIcon string) {
 	// Download the icons into the temp dir
 	r, _ := http.Get("http://" + ln.Addr().String() + "/img/icons/icon.png")
 	if r != nil {
@@ -293,5 +302,77 @@ func prepareIcons(ln net.Listener) (string, string) {
 		r.Body.Close()
 	}
 
-	return defaultIcon, darwinIcon
+	r, _ = http.Get("http://" + ln.Addr().String() + "/img/icons/timer.png")
+	if r != nil {
+		path := os.TempDir() + "/tray-icon.png"
+		o, _ := os.Create(path)
+		if o != nil {
+			if _, err := io.Copy(o, r.Body); err == nil {
+				trayIcon = path
+			}
+			o.Close()
+		}
+		r.Body.Close()
+	}
+
+	return
+}
+
+func (h *harvester) createMenu(trayIcon string) {
+	t := h.app.NewTray(&astilectron.TrayOptions{
+		Image: astiptr.Str(trayIcon),
+	})
+	t.Create()
+
+	h.menu = t.NewMenu([]*astilectron.MenuItemOptions{
+		{
+			Label: astiptr.Str("Stop Timers"),
+			OnClick: func(e astilectron.Event) (deleteListener bool) {
+				h.stopAllTimers()
+				h.sendTimers(false)
+				return
+			},
+		},
+		{Type: astilectron.MenuItemTypeSeparator},
+		{
+			Label: astiptr.Str("Open Dev Tools"),
+			Type:  astilectron.MenuItemTypeCheckbox,
+			OnClick: func(e astilectron.Event) (deleteListener bool) {
+				if *e.MenuItemOptions.Checked {
+					h.debug = true
+					if h.mainWindow != nil && h.mainWindow.IsShown() {
+						h.mainWindow.OpenDevTools()
+					}
+					if h.settingsWindow != nil && h.settingsWindow.IsShown() {
+						h.settingsWindow.OpenDevTools()
+					}
+					if h.timesheetWindow != nil && h.timesheetWindow.IsShown() {
+						h.timesheetWindow.OpenDevTools()
+					}
+				} else {
+					h.debug = true
+					if h.mainWindow != nil && h.mainWindow.IsShown() {
+						h.mainWindow.CloseDevTools()
+					}
+					if h.settingsWindow != nil && h.settingsWindow.IsShown() {
+						h.settingsWindow.CloseDevTools()
+					}
+					if h.timesheetWindow != nil && h.timesheetWindow.IsShown() {
+						h.timesheetWindow.CloseDevTools()
+					}
+				}
+				return
+			},
+		},
+		{Type: astilectron.MenuItemTypeSeparator},
+		{
+			Label: astiptr.Str("Quit"),
+			OnClick: func(e astilectron.Event) (deleteListener bool) {
+				h.app.Close()
+				return
+			},
+		},
+	})
+
+	h.menu.Create()
 }

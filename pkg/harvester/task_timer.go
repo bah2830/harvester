@@ -177,9 +177,9 @@ func (timers TaskTimers) GetByKey(key string) (*TaskTimer, error) {
 	return nil, ErrTimerNotExists
 }
 
-func GetKeysWithTimes(db *gorm.DB) ([]string, error) {
+func GetKeysWithTimes(db *gorm.DB, start, end time.Time) ([]string, error) {
 	keyStructs := make([]struct{ Key string }, 0)
-	if err := db.Table("task_timers").Select("key").Group("key").Scan(&keyStructs).Error; err != nil {
+	if err := db.Table("task_timers").Select("key").Where("started_at between ? and ?", start, end).Group("key").Scan(&keyStructs).Error; err != nil {
 		return nil, err
 	}
 

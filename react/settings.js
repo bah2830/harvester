@@ -22,76 +22,80 @@ export class Settings extends React.Component {
 
 
     render() {
+        const forms = [
+            {
+                'group': 'Jira',
+                'forms': [
+                    {
+                        'label': 'URL',
+                        'type': 'text',
+                        'id': 'jiraUrl',
+                        'placeholder': 'url',
+                        'defaultValue': appData.data.settings.jira.url
+                    },
+                    {
+                        'label': 'Username',
+                        'type': 'text',
+                        'id': 'jiraUser',
+                        'placeholder': 'username',
+                        'defaultValue': appData.data.settings.jira.user
+                    },
+                    {
+                        'label': 'Password',
+                        'type': 'password',
+                        'id': 'jiraPass',
+                        'placeholder': 'password',
+                        'defaultValue': appData.data.settings.jira.pass
+                    },
+                ]
+            },
+            {
+                'group': 'Harvest',
+                'forms': [
+                    {
+                        'label': 'Account Id',
+                        'type': 'text',
+                        'id': 'harvestUser',
+                        'placeholder': 'account_id',
+                        'defaultValue': appData.data.settings.harvest.user
+                    },
+                    {
+                        'label': 'Token',
+                        'type': 'password',
+                        'id': 'harvestPass',
+                        'placeholder': 'token',
+                        'defaultValue': appData.data.settings.harvest.pass
+                    }
+                ]
+            }
+        ];
+
         return (
             <div id="settings-container">
                 <form onSubmit={this.submit}>
-                    <h4>Jira</h4>
-                    <div className="form-group row">
-                            <label htmlFor="jiraUrl" className="col-4 col-form-label">URL</label>
-                            <div className="col">
-                            <input
-                                type="text"
-                                className="form-control"
-                                id="jiraUrl"
-                                placeholder="url"
-                                defaultValue={appData.data.settings.jira.url}
-                            />
+                    {forms.map((group, i) => {
+                        return (
+                            <div>
+                                <h5>{group.group}</h5>
+                                {group.forms.map((options, j) => {
+                                    return (
+                                        <div className="form-group">
+                                            <label htmlFor={options.id}>{options.label}</label>
+                                            <input
+                                                type={options.type}
+                                                className="form-control form-control-sm"
+                                                id={options.id}
+                                                placeholder={options.placeholder}
+                                                defaultValue={options.defaultValue}
+                                            />
+                                        </div>
+                                    );
+                                })}
+                                <br />
                             </div>
-                        </div>
-                    <div className="form-group row">
-                        <label htmlFor="jiraUser" className="col-4 col-form-label">Username</label>
-                        <div className="col">
-                            <input
-                                type="text"
-                                className="form-control"
-                                id="jiraUser"
-                                placeholder="username"
-                                defaultValue={appData.data.settings.jira.user}
-                            />
-                        </div>
-                    </div>
-                    <div className="form-group row">
-                        <label htmlFor="jiraPass" className="col-4 col-form-label">Password</label>
-                        <div className="col">
-                            <input
-                                type="password"
-                                className="form-control"
-                                id="jiraPass"
-                                placeholder="password"
-                                defaultValue={appData.data.settings.jira.pass}
-                            />
-                        </div>
-                    </div>
+                        );
+                    })}
 
-                    <br /><br />
-
-                    <h4>Harvest</h4>
-                    <div className="form-group row">
-                        <label htmlFor="harvestUser" className="col-4 col-form-label">Username</label>
-                        <div className="col">
-                            <input
-                                type="text"
-                                className="form-control"
-                                id="harvestUser"
-                                placeholder="username"
-                                defaultValue={appData.data.settings.harvest.user}
-                            />
-                        </div>
-                    </div>
-                    <div className="form-group row">
-                        <label htmlFor="harvestPass" className="col-4 col-form-label">Password</label>
-                        <div className="col">
-                            <input
-                                type="password"
-                                className="form-control"
-                                id="harvestPass"
-                                placeholder="password"
-                                defaultValue={appData.data.settings.harvest.pass}
-                            />
-                        </div>
-                    </div>
-
-                    <br />
                     <button id="save" className="btn btn-primary btn-block" onClick={this.save}>Save</button>
                 </form>
             </div>

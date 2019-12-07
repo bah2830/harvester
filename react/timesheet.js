@@ -1,4 +1,5 @@
 import React from 'react';
+import Moment from 'react-moment';
 
 export class TimeSheet extends React.Component {
     constructor(props) {
@@ -7,16 +8,26 @@ export class TimeSheet extends React.Component {
         this.state = {
             firstRender: true,
             activeView: 'day',
-            currentViewContent: <></>
+            currentTimesheet: "",
         };
 
         this.activateTab = this.activateTab.bind(this);
+        this.sendToBackend = this.sendToBackend.bind(this);
+        this.dateBack = this.dateBack.bind(this);
+        this.dateForward = this.dateForward.bind(this);
         this.day = this.day.bind(this);
         this.week = this.week.bind(this);
+        this.copy = this.copy.bind(this);
     }
 
-    activateTab(tab) {
-        astilectron.sendMessage(tab, function (response) {
+    sendToBackend(tab, message) {
+        if (message) {
+            message = tab + message;
+        } else {
+            message = tab;
+        }
+
+        astilectron.sendMessage(message, function (response) {
             if (response === undefined) {
                 return;
             }
@@ -24,14 +35,61 @@ export class TimeSheet extends React.Component {
             this.setState({
                 firstRender: false,
                 activeView: tab,
-                currentViewContent: this[tab](response),
+                currentTimesheet: response
             });
         }.bind(this));
     }
 
-    day(timesheet) {
+    activateTab(tab) {
+        this.sendToBackend(tab, '|' + this.state.currentTimesheet.timeStart + '|=');
+    }
+
+    dateBack(tab) {
+        this.sendToBackend(tab, '|' + this.state.currentTimesheet.timeStart + '|-');
+    }
+
+    dateForward(tab) {
+        this.sendToBackend(tab, '|' + this.state.currentTimesheet.timeStart + '|+');
+    }
+
+    copy(tab) {
+        this.sendToBackend(tab, '|' + this.state.currentTimesheet.timeStart + '|copy');
+    }
+
+    datePicker(tab) {
+        if (!this.state.currentTimesheet.timeStart) {
+            return <div>{tab}</div>;
+        }
+
+        const timeStart = this.state.currentTimesheet.timeStart;
+        const timeEnd = this.state.currentTimesheet.timeEnd;
+
+        let content = <Moment format="MMM Do" date={timeStart} />;
+        if (tab === 'week') {
+            content = <div><Moment format="MMM Do" date ={timeStart} /> - <Moment format="MMM Do" date={timeEnd} /></div>;
+        }
+
         return (
-            <table className="table time-table ">
+            <div className="btn-group btn-group-sm btn-datepicker" role="group">
+                <button type="button" className="btn btn-sm btn-dark" onClick={() => this.dateBack(tab)}>
+                    <img src="/img/icons/left.png" height="20px" />
+                </button>
+                <button type="button" className="btn btn-sm btn-secondary" onClick={() => this.activateTab(tab)}>{content}</button>
+                <button type="button" className="btn btn-sm btn-dark" onClick={() => this.dateForward(tab)}>
+                    <img src="/img/icons/right.png" height="20px" />
+                </button>
+            </div>
+        );
+    }
+
+    day() {
+        const timesheet = this.state.currentTimesheet
+        if (!timesheet) {
+            return <></>;
+        }
+
+        return (
+            <table className="table time-table">
                 <tbody>
                     <tr>
                         <td>Jira</td>
@@ -55,7 +113,12 @@ export class TimeSheet extends React.Component {
         );
     }
 
-    week(timesheet) {
+    week() {
+        const timesheet = this.state.currentTimesheet
+        if (!timesheet) {
+            return <></>;
+        }
+
         return (
             <table className="table time-table ">
                 <tbody>
@@ -120,15 +183,20 @@ export class TimeSheet extends React.Component {
                             })}
                         </div>
                     </div>
+                    <div className="p-2">{this.datePicker(this.state.activeView)}</div>
                     <div className="col">&nbsp;</div>
                     <div className="p-2">
-                        <img id="refresh" onClick={() => this.activateTab(this.state.activeView)} src="/img/icons/refresh.png" height="20px" />
+                        <img
+                            onClick={() => this.copy(this.state.activeView)}
+                            src="/img/icons/copy.png"
+                            height="20px"
+                            alt="Copy all projects without a harvest project for the month to the clipboard"
+                        />
                     </div>
                 </div>
 
                 {this.state.firstRender && this.activateTab('day')}
-
-                {this.state.currentViewContent}
+                {this[this.state.activeView](this.state.currentTimesheet)}
             </div>
         );
     }

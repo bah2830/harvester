@@ -19,6 +19,8 @@ github.com/asticode/go-astilog v1.1.0/go.mod h1:gCHqsohE/vsGNfzdt7TZgYE849WEmnHU
 github.com/asticode/go-astitools v1.0.0/go.mod h1:E7f1P0KkBNgafRCD0dHqn41jNHyYHjxrnK1jH2s4pmA=
 github.com/asticode/go-astitools v1.2.0 h1:KJ0SNQhdc0bG6hD5Jy4dVbBxFr3k0feTSipa2TIq/+U=
 github.com/asticode/go-astitools v1.2.0/go.mod h1:EfgrhUJK6nM17TckqASIqR2W71uNUAoIonm6mNhUtaQ=
+github.com/atotto/clipboard v0.1.2 h1:YZCtFu5Ie8qX2VmVTBnrqLSiU9XOWwqNRmdT3gIQzbY=
+github.com/atotto/clipboard v0.1.2/go.mod h1:ZY9tmq7sm5xIbd9bOK4onWV4S6X0u6GY7Vn0Yu86PYI=
 github.com/becoded/go-harvest v0.0.0-20191118150442-2825a596cd0a h1:9MN99XxGb6oO5u+6EDjTj715n1mk6btiZ5r3bm7mijg=
 github.com/becoded/go-harvest v0.0.0-20191118150442-2825a596cd0a/go.mod h1:TA/ztIb5+Qn8bf1ngENVhXlS3byQVll3c29KNV/Df2U=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=
