@@ -27,7 +27,7 @@ func main() {
 	}
 
 	if *dbFile == "" {
-		*dbFile = home + "/.harvester.db"
+		*dbFile = home + "/.harvester/harvester.db"
 	}
 
 	log.Printf("using database file at %s", *dbFile)

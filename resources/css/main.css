@@ -14,9 +14,8 @@ body {
     padding-right: 0px;
 }
 
-#main-content, #error-content {
-    margin-top: 35px;
-    padding: 3px;
+#main-content, #error-content, #timesheet {
+    margin-top: 5px;
 }
 
 .timer-description {
@@ -61,9 +60,17 @@ table.time-table {
 
 table.time-table td, table.time-table th {
     color: #bcbebf;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
     padding: 2px;
     background-color: transparent;
+}
+
+table.time-table thead td {
+    font-weight: bold;
+    border-bottom: 1px solid #bcbebf;
+}
+
+table.time-table tr.total-row td {
+    font-weight: bold;
 }
 
 #settings-container {

@@ -17,8 +17,8 @@ type Settings struct {
 	Settings string
 
 	RefreshInterval time.Duration `gorm:"-"`
-	Jira            *SettingsData `gorm:"-" json:"jira"`
-	Harvest         *SettingsData `gorm:"-" json:"harvest"`
+	Jira            SettingsData  `gorm:"-" json:"jira"`
+	Harvest         SettingsData  `gorm:"-" json:"harvest"`
 }
 
 type SettingsData struct {
@@ -47,7 +47,7 @@ func (s *Settings) Save(db *gorm.DB) error {
 
 func GetSettings(db *gorm.DB) (*Settings, error) {
 	var settings Settings
-	if err := db.Take(&settings).Error; err != nil {
+	if err := db.Last(&settings).Error; err != nil {
 		return nil, err
 	}
 

@@ -17,9 +17,12 @@ export class Settings extends React.Component {
                 pass: document.getElementById('harvestPass').value
             }
         }
-        astilectron.sendMessage(JSON.stringify(settings));
+        astilectron.sendMessage('settings|' + JSON.stringify(settings));
     }
 
+    description(options) {
+        return <small id={options.id + 'Help'} className="form-text text-muted">{options.description}</small>;
+    }
 
     render() {
         const forms = [
@@ -31,21 +34,21 @@ export class Settings extends React.Component {
                         'type': 'text',
                         'id': 'jiraUrl',
                         'placeholder': 'url',
-                        'defaultValue': appData.data.settings.jira.url
+                        'defaultValue': (appData.data.settings.jira && appData.data.settings.jira.url)
                     },
                     {
                         'label': 'Username',
                         'type': 'text',
                         'id': 'jiraUser',
                         'placeholder': 'username',
-                        'defaultValue': appData.data.settings.jira.user
+                        'defaultValue': (appData.data.settings.jira && appData.data.settings.jira.user)
                     },
                     {
                         'label': 'Password',
                         'type': 'password',
                         'id': 'jiraPass',
                         'placeholder': 'password',
-                        'defaultValue': appData.data.settings.jira.pass
+                        'defaultValue': (appData.data.settings.jira && appData.data.settings.jira.pass)
                     },
                 ]
             },
@@ -57,14 +60,15 @@ export class Settings extends React.Component {
                         'type': 'text',
                         'id': 'harvestUser',
                         'placeholder': 'account_id',
-                        'defaultValue': appData.data.settings.harvest.user
+                        'defaultValue': (appData.data.settings.harvest && appData.data.settings.harvest.user),
+                        'description': 'A new application can be created at https://id.getharvest.com/developers'
                     },
                     {
                         'label': 'Token',
                         'type': 'password',
                         'id': 'harvestPass',
                         'placeholder': 'token',
-                        'defaultValue': appData.data.settings.harvest.pass
+                        'defaultValue': (appData.data.settings.harvest && appData.data.settings.harvest.pass)
                     }
                 ]
             }
@@ -79,7 +83,7 @@ export class Settings extends React.Component {
                                 <h5>{group.group}</h5>
                                 {group.forms.map((options, j) => {
                                     return (
-                                        <div className="form-group">
+                                        <div key={j} className="form-group">
                                             <label htmlFor={options.id}>{options.label}</label>
                                             <input
                                                 type={options.type}
@@ -87,7 +91,9 @@ export class Settings extends React.Component {
                                                 id={options.id}
                                                 placeholder={options.placeholder}
                                                 defaultValue={options.defaultValue}
+                                                aria-describedby={options.id + 'Help'}
                                             />
+                                            {options.description && this.description(options)}
                                         </div>
                                     );
                                 })}

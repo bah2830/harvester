@@ -29,9 +29,9 @@ type TaskTimer struct {
 
 type TaskTimers []*TaskTimer
 
-func (t *TaskTimer) Start(db *gorm.DB, harvestClient *HarvestClient) error {
+func (h *harvester) StartTimer(t *TaskTimer) error {
 	// Make sure an existing timer doesn't already exist
-	existingTimers, err := GetActiveTimers(db, nil, harvestClient)
+	existingTimers, err := h.GetActiveTimers()
 	if err != nil {
 		return err
 	}
@@ -39,7 +39,7 @@ func (t *TaskTimer) Start(db *gorm.DB, harvestClient *HarvestClient) error {
 	// Stop the current timers before starting the new one
 	if len(existingTimers) > 0 {
 		for _, timer := range existingTimers {
-			if err := timer.Stop(db, harvestClient); err != nil {
+			if err := h.StopTimer(timer); err != nil {
 				return err
 			}
 		}
@@ -56,13 +56,13 @@ func (t *TaskTimer) Start(db *gorm.DB, harvestClient *HarvestClient) error {
 	}
 
 	t.StartedAt = time.Now().UTC()
-	if err := db.Create(t).Error; err != nil {
+	if err := h.db.Create(t).Error; err != nil {
 		return err
 	}
 
 	// If a harvest task exists start the timer for it
 	if t.Harvest != nil {
-		return t.Harvest.startTimer(harvestClient)
+		return t.Harvest.startTimer(h.harvestClient)
 	}
 
 	t.Running = true
@@ -71,7 +71,7 @@ func (t *TaskTimer) Start(db *gorm.DB, harvestClient *HarvestClient) error {
 	return nil
 }
 
-func (t *TaskTimer) Stop(db *gorm.DB, harvestClient *HarvestClient) error {
+func (h *harvester) StopTimer(t *TaskTimer) error {
 	if t.New() {
 		return nil
 	}
@@ -79,12 +79,12 @@ func (t *TaskTimer) Stop(db *gorm.DB, harvestClient *HarvestClient) error {
 	stoppedAt := time.Now().UTC()
 	t.StoppedAt = &stoppedAt
 
-	if err := db.Save(t).Error; err != nil {
+	if err := h.db.Save(t).Error; err != nil {
 		return err
 	}
 
 	if t.Harvest != nil {
-		return t.Harvest.stopTimer(harvestClient)
+		return t.Harvest.stopTimer(h.harvestClient)
 	}
 
 	t.Running = false
@@ -105,22 +105,22 @@ func (h *harvester) updateTimers(currentRunning string) {
 	}
 }
 
-func GetActiveTimers(db *gorm.DB, jiraClient *jira.Client, harvestClient *HarvestClient) (TaskTimers, error) {
+func (h *harvester) GetActiveTimers() (TaskTimers, error) {
 	var timers TaskTimers
-	if err := db.Where("stopped_at is null").Find(&timers).Error; err != nil {
+	if err := h.db.Where("stopped_at is null").Find(&timers).Error; err != nil {
 		return nil, err
 	}
 
 	for _, timer := range timers {
-		if jiraClient != nil {
-			jira, _, err := jiraClient.Issue.Get(timer.Key, &jira.GetQueryOptions{})
+		if h.jiraClient != nil {
+			jira, err := h.getJiraByKey(timer.Key)
 			if err != nil {
 				return nil, err
 			}
 			timer.Jira = jira
 		}
-		if harvestClient != nil {
-			harvestTask, err := harvestClient.getUserProjectByKey(timer.Key)
+		if h.harvestClient != nil {
+			harvestTask, err := h.harvestClient.getUserProjectByKey(timer.Key)
 			if err != nil {
 				return nil, err
 			}

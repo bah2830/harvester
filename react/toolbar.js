@@ -23,8 +23,20 @@ export class Toolbar extends React.Component {
                 <div className="p-2"><img onClick={this.harvest} src="/img/icons/harvest.png" height="20px" /></div>
                 <div className="p-2"><img onClick={this.refresh} src="/img/icons/refresh.png" height="20px" /></div>
                 <div className="col">&nbsp;</div>
-                <div className="p-2"><img onClick={this.timesheet} src="/img/icons/info.png" height="20px" /></div>
-                <div className="p-2"><img onClick={this.settings} src="/img/icons/settings.png" height="20px" /></div>
+                <div className="p-2">
+                    <img
+                        onClick={this.timesheet}
+                        src={appData.data.view === 'timesheet' ? "/img/icons/close.png" : "/img/icons/info.png"}
+                        height="20px"
+                    />
+                </div>
+                <div className="p-2">
+                    <img
+                        onClick={this.settings}
+                        src={appData.data.view === 'settings' ? "/img/icons/close.png" : "/img/icons/settings.png"}
+                        height="20px"
+                    />
+                </div>
             </nav>
         );
     }

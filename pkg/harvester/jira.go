@@ -45,6 +45,11 @@ func (h *harvester) getUsersActiveIssues() ([]jira.Issue, error) {
 	return issues, err
 }
 
+func (h *harvester) getJiraByKey(key string) (*jira.Issue, error) {
+	issue, _, err := h.jiraClient.Issue.Get(key, nil)
+	return issue, err
+}
+
 func (h *harvester) harvestToJira(task *harvestTask) jira.Issue {
 	return jira.Issue{
 		Key: *task.Project.Code,

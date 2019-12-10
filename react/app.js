@@ -10,8 +10,8 @@ class App extends React.Component {
     render() {
         return (
             <div>
+                <Toolbar />}
                 {appData.data.error && <Error />}
-                {appData.data.view === 'main' && <Toolbar />}
                 {appData.data.timers && <Timers />}
                 {appData.data.view === 'timesheet' && <TimeSheet />}
                 {appData.data.view === 'settings' && <Settings />}

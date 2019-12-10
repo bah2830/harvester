@@ -27,7 +27,7 @@ type AppData struct {
 	Error    string    `json:"error"`
 }
 
-func (h *harvester) getWindow(view string, opts *astilectron.WindowOptions) (*Window, error) {
+func (h *harvester) createWindow() error {
 	displays := h.app.Displays()
 	display := displays[0]
 	for _, d := range displays {
@@ -40,18 +40,6 @@ func (h *harvester) getWindow(view string, opts *astilectron.WindowOptions) (*Wi
 	w, err := h.app.NewWindowInDisplay(
 		display,
 		"http://"+h.listener.Addr().String()+"/templates/main.html",
-		opts,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Window{Window: w, View: view}, err
-}
-
-func (h *harvester) renderMainWindow() error {
-	w, err := h.getWindow(
-		"main",
 		&astilectron.WindowOptions{
 			Title:           astiptr.Str("Harvester"),
 			Height:          astiptr.Int(200),
@@ -65,7 +53,7 @@ func (h *harvester) renderMainWindow() error {
 		return err
 	}
 
-	h.mainWindow = w
+	h.mainWindow = &Window{Window: w}
 	if err := h.mainWindow.Create(); err != nil {
 		return err
 	}
@@ -76,99 +64,62 @@ func (h *harvester) renderMainWindow() error {
 		}
 	}
 
-	ready := make(chan bool)
-	h.mainListener(ready)
-	go func() {
-		<-ready
-		h.mainWindow.sendMessage(&AppData{})
-	}()
+	return err
+}
+
+func (h *harvester) renderMainWindow() error {
+	if h.mainWindow == nil {
+		if err := h.createWindow(); err != nil {
+			return err
+		}
+
+		ready := make(chan bool)
+		h.mainListener(ready)
+		go func() {
+			<-ready
+			h.mainWindow.sendMessage(&AppData{View: "main"})
+		}()
+	} else {
+		h.mainWindow.SetBounds(astilectron.RectangleOptions{
+			SizeOptions: astilectron.SizeOptions{
+				Height: astiptr.Int(200),
+				Width:  astiptr.Int(350),
+			},
+		})
+		h.mainWindow.sendMessage(&AppData{View: "main"})
+		h.Refresh()
+	}
 
 	return nil
 }
 
 func (h *harvester) renderSettings() error {
-	if h.settingsWindow == nil || h.settingsWindow.IsDestroyed() {
-		w, err := h.getWindow(
-			"settings",
-			&astilectron.WindowOptions{
-				Title:           astiptr.Str("Settings"),
-				Height:          astiptr.Int(565),
-				Width:           astiptr.Int(400),
-				BackgroundColor: astiptr.Str("#1A1D21"),
-				Resizable:       astiptr.Bool(false),
-			},
-		)
-		if err != nil {
-			return err
-		}
-
-		h.settingsWindow = w
-	}
-
-	if err := h.settingsWindow.Create(); err != nil {
-		return err
-	}
-
-	if h.debug {
-		if err := h.settingsWindow.OpenDevTools(); err != nil {
-			return err
-		}
-	}
-
-	ready := make(chan bool)
-	h.settingsListener(ready)
-	go func() {
-		<-ready
-		h.settingsWindow.sendMessage(&AppData{Settings: h.Settings})
-	}()
-
-	return nil
+	h.mainWindow.SetBounds(astilectron.RectangleOptions{
+		SizeOptions: astilectron.SizeOptions{
+			Height: astiptr.Int(610),
+			Width:  astiptr.Int(430),
+		},
+	})
+	return h.mainWindow.sendMessage(&AppData{View: "settings", Settings: h.Settings})
 }
 
 func (h *harvester) renderTimesheet() error {
-	if h.timesheetWindow == nil || h.timesheetWindow.IsDestroyed() {
-		w, err := h.getWindow(
-			"timesheet",
-			&astilectron.WindowOptions{
-				Title:           astiptr.Str("TimeSheet"),
-				Height:          astiptr.Int(500),
-				Width:           astiptr.Int(600),
-				BackgroundColor: astiptr.Str("#1A1D21"),
-				Resizable:       astiptr.Bool(false),
-			},
-		)
-		if err != nil {
-			return err
-		}
+	h.mainWindow.SetBounds(astilectron.RectangleOptions{
+		SizeOptions: astilectron.SizeOptions{
+			Height: astiptr.Int(500),
+			Width:  astiptr.Int(630),
+		},
+	})
 
-		h.timesheetWindow = w
-	}
+	return h.mainWindow.sendMessage(&AppData{View: "timesheet"})
 
-	if err := h.timesheetWindow.Create(); err != nil {
-		return err
-	}
-
-	if h.debug {
-		if err := h.timesheetWindow.OpenDevTools(); err != nil {
-			return err
-		}
-	}
-
-	ready := make(chan bool)
-	h.timesheetListener(ready)
-	go func() {
-		<-ready
-		h.timesheetWindow.sendMessage(&AppData{})
-	}()
-
-	return nil
 }
 
 func (h *harvester) mainListener(ready chan bool) {
 	h.mainWindow.OnMessage(func(m *astilectron.EventMessage) interface{} {
 		var data string
 		if err := m.Unmarshal(&data); err != nil {
-			h.sendErr(h.mainWindow, err)
+			h.sendErr(err)
 			return err
 		}
 
@@ -178,95 +129,68 @@ func (h *harvester) mainListener(ready chan bool) {
 		case data == "copy":
 		case data == "refresh":
 			if err := h.Refresh(); err != nil {
-				h.sendErr(h.mainWindow, err)
+				h.sendErr(err)
 				return err
 			}
 		case data == "timesheet":
-			if err := h.renderTimesheet(); err != nil {
-				h.sendErr(h.mainWindow, err)
+			var err error
+			if h.mainWindow.View == "timesheet" {
+				err = h.renderMainWindow()
+			} else {
+				err = h.renderTimesheet()
+			}
+			if err != nil {
+				h.sendErr(err)
 				return err
 			}
 		case data == "settings":
-			if err := h.renderSettings(); err != nil {
-				h.sendErr(h.mainWindow, err)
+			var err error
+			if h.mainWindow.View == "settings" {
+				err = h.renderMainWindow()
+			} else {
+				err = h.renderSettings()
+			}
+			if err != nil {
+				h.sendErr(err)
 				return err
 			}
 		case data == "harvest":
 			if h.harvestURL != nil {
 				if err := open.Run(h.harvestURL.String()); err != nil {
-					h.sendErr(h.mainWindow, err)
+					h.sendErr(err)
 					return err
 				}
 			}
-		case strings.Contains(data, "|"):
-			parts := strings.Split(data, "|")
-			task, err := h.Timers.Tasks.GetByKey(parts[1])
-			if err != nil {
-				h.sendErr(h.mainWindow, err)
+		case strings.HasPrefix(data, "settings|"):
+			data = strings.TrimPrefix(data, "settings|")
+
+			var settings Settings
+			if err := json.Unmarshal([]byte(data), &settings); err != nil {
+				h.sendErr(err)
 				return err
 			}
 
-			var currentRunning string
-			switch parts[0] {
-			case "start":
-				currentRunning = task.Key
-				err = task.Start(h.db, h.harvestClient)
-			case "stop":
-				err = task.Stop(h.db, h.harvestClient)
-			case "open":
-				err = open.Run(h.Settings.Jira.URL + "/browse/" + parts[1])
-			}
-			if err != nil {
-				h.sendErr(h.mainWindow, err)
-				return err
+			if h.Settings == nil {
+				h.Settings = &Settings{
+					RefreshInterval: defaultRefreshInterval,
+				}
 			}
 
-			h.updateTimers(currentRunning)
-			h.sendTimers(false)
-		default:
-			log.Println("unknown rpc handler " + data)
-		}
+			h.Settings.Jira = SettingsData{
+				URL:  settings.Jira.URL,
+				User: settings.Jira.User,
+				Pass: settings.Jira.Pass,
+			}
 
-		return nil
-	})
-}
+			h.Settings.Harvest = SettingsData{
+				User: settings.Harvest.User,
+				Pass: settings.Harvest.Pass,
+			}
 
-func (h *harvester) settingsListener(ready chan bool) {
-	h.settingsWindow.OnMessage(func(m *astilectron.EventMessage) interface{} {
-		var raw string
-		m.Unmarshal(&raw)
-		if raw == "ready" {
-			ready <- true
-			return nil
-		}
+			h.changeCh <- true
 
-		var settings Settings
-		if err := json.Unmarshal([]byte(raw), &settings); err != nil {
-			h.sendErr(h.settingsWindow, err)
-			return err
-		}
-
-		h.Settings.Jira.URL = settings.Jira.URL
-		h.Settings.Jira.User = settings.Jira.User
-		h.Settings.Jira.Pass = settings.Jira.Pass
-		h.Settings.Harvest.User = settings.Harvest.User
-		h.Settings.Harvest.Pass = settings.Harvest.Pass
-		h.changeCh <- true
-
-		return nil
-	})
-}
-
-func (h *harvester) timesheetListener(ready chan bool) {
-	h.timesheetWindow.OnMessage(func(m *astilectron.EventMessage) interface{} {
-		var data string
-		m.Unmarshal(&data)
-
-		var start, end time.Time
-		switch {
-		case data == "ready":
-			ready <- true
-		default:
+			h.renderMainWindow()
+		case strings.HasPrefix(data, "day|") || strings.HasPrefix(data, "week|"):
 			now.WeekStartDay = time.Monday
 
 			parts := strings.Split(data, "|")
@@ -279,7 +203,7 @@ func (h *harvester) timesheetListener(ready chan bool) {
 			if parts[2] != "=" {
 				startTime, err = time.Parse("2006-01-02T15:04:05Z", parts[1])
 				if err != nil {
-					h.sendErr(h.timesheetWindow, err)
+					h.sendErr(err)
 					return nil
 				}
 			}
@@ -288,6 +212,8 @@ func (h *harvester) timesheetListener(ready chan bool) {
 			if parts[0] == "week" {
 				addDuration = 24 * 7 * time.Hour
 			}
+
+			var start, end time.Time
 
 			switch parts[2] {
 			case "=":
@@ -304,35 +230,78 @@ func (h *harvester) timesheetListener(ready chan bool) {
 				end = now.With(startTime).EndOfMonth()
 				keys, err := GetKeysWithTimes(h.db, start, end)
 				if err != nil {
-					h.sendErr(h.timesheetWindow, err)
+					h.sendErr(err)
 					return nil
 				}
 
-				clipboard.WriteAll(strings.Join(keys, "\n"))
+				var noProjects string
+				for _, k := range keys {
+					tracker, err := h.Timers.Tasks.GetByKey(k)
+					if err == nil {
+						if tracker.Harvest == nil {
+							noProjects += fmt.Sprintf("\n%s; %s", tracker.Key, tracker.Jira.Fields.Summary)
+						}
+					}
+				}
+
+				clipboard.WriteAll(noProjects)
 				return nil
 			}
 
 			end = start.Add(addDuration - 1*time.Minute)
+
+			timesheet, err := h.getTimeSheet(start.UTC(), end.UTC())
+			if err != nil {
+				h.sendErr(err)
+				return nil
+			}
+			return timesheet
+		case strings.Contains(data, "|"):
+			parts := strings.Split(data, "|")
+			task, err := h.Timers.Tasks.GetByKey(parts[1])
+			if err != nil {
+				h.sendErr(err)
+				return err
+			}
+
+			var currentRunning string
+			switch parts[0] {
+			case "start":
+				currentRunning = task.Key
+				err = h.StartTimer(task)
+			case "stop":
+				err = h.StopTimer(task)
+			case "open":
+				err = open.Run(h.Settings.Jira.URL + "/browse/" + parts[1])
+			}
+			if err != nil {
+				h.sendErr(err)
+				return err
+			}
+
+			h.updateTimers(currentRunning)
+			h.sendTimers(false)
+		default:
+			log.Println("unknown rpc handler " + data)
 		}
 
-		timesheet, err := h.getTimeSheet(start.UTC(), end.UTC())
-		if err != nil {
-			h.sendErr(h.timesheetWindow, err)
-			return nil
-		}
-		return timesheet
+		return nil
 	})
 }
 
-func (h *harvester) sendErr(w *Window, err error) {
+func (h *harvester) sendErr(err error) {
 	fmt.Println(err)
-	current := *w.CurrentData
+	current := *h.mainWindow.CurrentData
 	current.Error = err.Error()
-	w.SendMessage(current)
+	h.mainWindow.SendMessage(current)
 }
 
 func (h *harvester) sendTimers(auto bool) {
-	h.mainWindow.sendMessage(&AppData{Timers: h.Timers})
+	if h.mainWindow.View != "main" {
+		return
+	}
+
+	h.mainWindow.sendMessage(&AppData{View: "main", Timers: h.Timers})
 
 	// Change the height of the window to match the number of timers
 	if auto {
@@ -345,8 +314,8 @@ func (h *harvester) sendTimers(auto bool) {
 	}
 }
 
-func (w *Window) sendMessage(message *AppData) {
-	message.View = w.View
+func (w *Window) sendMessage(message *AppData) error {
+	w.View = message.View
 	w.CurrentData = message
-	w.SendMessage(message)
+	return w.SendMessage(message)
 }

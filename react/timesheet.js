@@ -89,12 +89,14 @@ export class TimeSheet extends React.Component {
         }
 
         return (
-            <table className="table time-table">
-                <tbody>
+            <table className="time-table">
+                <thead>
                     <tr>
                         <td>Jira</td>
                         <td align="right">Hours</td>
                     </tr>
+                </thead>
+                <tbody>
                     {timesheet.tasks.map((jira, i) => {
                         return (
                             <tr key={i}>
@@ -104,7 +106,7 @@ export class TimeSheet extends React.Component {
                         );
                     })}
                     <tr><td colSpan="2">&nbsp;</td></tr>
-                    <tr>
+                    <tr  className="total-row">
                         <td>Total</td>
                         <td align="right">{timesheet.total}</td>
                     </tr>
@@ -120,8 +122,8 @@ export class TimeSheet extends React.Component {
         }
 
         return (
-            <table className="table time-table ">
-                <tbody>
+            <table className="time-table ">
+                <thead>
                     <tr>
                         <td>Jira</td>
                         <td align="right">Mon</td>
@@ -133,6 +135,8 @@ export class TimeSheet extends React.Component {
                         <td align="right">Sun</td>
                         <td align="right">Total</td>
                     </tr>
+                </thead>
+                <tbody>
                     {timesheet.tasks.map((jira, i) => {
                         return (
                             <tr key={i}>
@@ -145,7 +149,7 @@ export class TimeSheet extends React.Component {
                         );
                     })}
                     <tr><td colSpan="9">&nbsp;</td></tr>
-                    <tr>
+                    <tr className="total-row">
                         <td>Total</td>
                         {timesheet.daysTotal.map((t, i) => {
                             return <td key={i} align="right">{t}</td>;
@@ -164,7 +168,7 @@ export class TimeSheet extends React.Component {
         ];
 
         return (
-            <div className="container-fluid">
+            <div id="timesheet" className="container-fluid">
                 <div className="row">
                     <div className="p-2">
                         <div className="btn-group btn-group-sm" role="group">

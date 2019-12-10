@@ -19,20 +19,18 @@ import (
 )
 
 type harvester struct {
-	app             *astilectron.Astilectron
-	menu            *astilectron.Menu
-	mainWindow      *Window
-	timesheetWindow *Window
-	settingsWindow  *Window
-	Settings        *Settings `json:"settings"`
-	changeCh        chan bool
-	db              *gorm.DB
-	jiraClient      *jira.Client
-	harvestClient   *HarvestClient
-	harvestURL      *url.URL
-	Timers          *Timers `json:"timers"`
-	listener        net.Listener
-	debug           bool
+	app           *astilectron.Astilectron
+	menu          *astilectron.Menu
+	mainWindow    *Window
+	Settings      *Settings `json:"settings"`
+	changeCh      chan bool
+	db            *gorm.DB
+	jiraClient    *jira.Client
+	harvestClient *HarvestClient
+	harvestURL    *url.URL
+	Timers        *Timers `json:"timers"`
+	listener      net.Listener
+	debug         bool
 }
 
 type Timers struct {
@@ -46,13 +44,19 @@ func NewHarvester(db *gorm.DB) (*harvester, error) {
 	}
 	go http.Serve(ln, http.FileServer(assets.AssetFile()))
 
-	defaultIcon, darwinIcon, trayIcon := prepareIcons(ln)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatalln("Unable to get user home directory", err)
+	}
+
+	harvesterDir := home + "/.harvester"
+	prepareIcons(harvesterDir, ln)
 
 	app, err := astilectron.New(astilectron.Options{
 		AppName:            "Harvester",
-		AppIconDefaultPath: defaultIcon,
-		AppIconDarwinPath:  darwinIcon,
-		DataDirectoryPath:  "./electron",
+		AppIconDefaultPath: harvesterDir + "/icon.png",
+		AppIconDarwinPath:  harvesterDir + "/icon.icns",
+		DataDirectoryPath:  harvesterDir + "/electron",
 	})
 	if err != nil {
 		return nil, err
@@ -79,7 +83,7 @@ func NewHarvester(db *gorm.DB) (*harvester, error) {
 		return nil, err
 	}
 
-	h.createMenu(trayIcon)
+	h.createMenu(harvesterDir + "/timer.png")
 
 	if err := h.renderMainWindow(); err != nil {
 		return nil, err
@@ -90,27 +94,25 @@ func NewHarvester(db *gorm.DB) (*harvester, error) {
 
 func (h *harvester) Start() {
 	// Hold onto the last copy of settings to check for diffs
-	previousSettings := h.Settings
+	previousSettings := *h.Settings
 
 	// Start the purger to keep the database small
 	go StartJiraPurger(h.db)
 
 	if err := h.Refresh(); err != nil {
-		h.sendErr(h.mainWindow, err)
+		h.sendErr(err)
 	}
 
 	tick := time.NewTicker(previousSettings.RefreshInterval)
 	for {
 		select {
-		case <-time.After(30 * time.Second):
-			h.sendTimers(false)
 		case <-tick.C:
 			if err := h.Refresh(); err != nil {
-				h.sendErr(h.mainWindow, err)
+				h.sendErr(err)
 			}
 		case <-h.changeCh:
 			if err := h.Settings.Save(h.db); err != nil {
-				h.sendErr(h.mainWindow, err)
+				h.sendErr(err)
 				continue
 			}
 
@@ -124,14 +126,23 @@ func (h *harvester) Start() {
 				h.Settings.Jira.User != previousSettings.Jira.User ||
 				h.Settings.Jira.Pass != previousSettings.Jira.Pass {
 				if err := h.getNewJiraClient(); err != nil {
-					h.sendErr(h.mainWindow, err)
+					h.sendErr(err)
 					continue
 				}
 			}
 
-			previousSettings = h.Settings
+			// If the harvest credentials changed get a new client
+			if h.Settings.Harvest.User != previousSettings.Harvest.User ||
+				h.Settings.Harvest.Pass != previousSettings.Harvest.Pass {
+				if err := h.getNewHarvestClient(); err != nil {
+					h.sendErr(err)
+					continue
+				}
+			}
+
+			previousSettings = *h.Settings
 			if err := h.Refresh(); err != nil {
-				h.sendErr(h.mainWindow, err)
+				h.sendErr(err)
 			}
 		}
 	}
@@ -139,7 +150,7 @@ func (h *harvester) Start() {
 
 func (h *harvester) Refresh() error {
 	// Get any current timers running in the local database
-	timers, err := GetActiveTimers(h.db, h.jiraClient, h.harvestClient)
+	timers, err := h.GetActiveTimers()
 	if err != nil {
 		return err
 	}
@@ -185,17 +196,31 @@ func (h *harvester) Refresh() error {
 
 		// Add harvest projects to timers
 		for _, task := range tasks {
+			var newTimer bool
+
 			harvestTask := *task
 			timer, err := timers.GetByKey(*task.Project.Code)
 			if err != nil {
+				newTimer = true
 				timer = &TaskTimer{
 					Key:     *task.Project.Code,
 					Harvest: &harvestTask,
 				}
-				timers = append(timers, timer)
-				continue
 			}
+
+			if h.jiraClient != nil && timer.Jira == nil {
+				jira, err := h.getJiraByKey(*task.Project.Code)
+				if err != nil || jira.Fields.Status.Name == "Done" {
+					continue
+				}
+				timer.Jira = jira
+			}
+
 			timer.Harvest = &harvestTask
+
+			if newTimer {
+				timers = append(timers, timer)
+			}
 		}
 	}
 
@@ -214,11 +239,14 @@ func (h *harvester) Refresh() error {
 func (h *harvester) init() error {
 	settings, err := GetSettings(h.db)
 	if err != nil && !gorm.IsRecordNotFoundError(err) {
-		return errors.WithMessage(err, "error getting settings")
+		log.Println(err)
 	}
-	if settings != nil {
-		h.Settings = settings
+
+	if settings == nil {
+		return nil
 	}
+
+	h.Settings = settings
 
 	// Setup the jira client
 	if h.Settings.Jira.URL != "" && h.Settings.Jira.User != "" {
@@ -239,7 +267,7 @@ func (h *harvester) init() error {
 
 func (h *harvester) stopAllTimers() error {
 	for _, timer := range h.Timers.Tasks {
-		if err := timer.Stop(h.db, h.harvestClient); err != nil {
+		if err := h.StopTimer(timer); err != nil {
 			return err
 		}
 	}
@@ -257,13 +285,6 @@ func (h *harvester) Stop() {
 
 	h.listener.Close()
 
-	if h.timesheetWindow != nil {
-		h.timesheetWindow.Close()
-	}
-	if h.settingsWindow != nil {
-		h.settingsWindow.Close()
-	}
-
 	h.mainWindow.Close()
 	h.app.Close()
 }
@@ -274,45 +295,32 @@ func (h *harvester) Run() error {
 	return nil
 }
 
-func prepareIcons(ln net.Listener) (defaultIcon string, darwinIcon string, trayIcon string) {
-	// Download the icons into the temp dir
-	r, _ := http.Get("http://" + ln.Addr().String() + "/img/icons/icon.png")
-	if r != nil {
-		path := os.TempDir() + "/harvester-icon.png"
-		o, _ := os.Create(path)
-		if o != nil {
-			if _, err := io.Copy(o, r.Body); err == nil {
-				defaultIcon = path
-			}
-			o.Close()
-		}
-		r.Body.Close()
+func prepareIcons(harvesterDir string, ln net.Listener) {
+	icons := []string{
+		"icon.png",
+		"icon.icns",
+		"timer.png",
 	}
 
-	r, _ = http.Get("http://" + ln.Addr().String() + "/img/icons/icon.icns")
-	if r != nil {
-		path := os.TempDir() + "/harvester-icon.icns"
-		o, _ := os.Create(path)
-		if o != nil {
-			if _, err := io.Copy(o, r.Body); err == nil {
-				darwinIcon = path
-			}
-			o.Close()
+	for _, icon := range icons {
+		path := harvesterDir + "/" + icon
+		if _, err := os.Stat(path); err == nil {
+			continue
 		}
-		r.Body.Close()
-	}
 
-	r, _ = http.Get("http://" + ln.Addr().String() + "/img/icons/timer.png")
-	if r != nil {
-		path := os.TempDir() + "/tray-icon.png"
-		o, _ := os.Create(path)
-		if o != nil {
-			if _, err := io.Copy(o, r.Body); err == nil {
-				trayIcon = path
-			}
-			o.Close()
+		r, err := http.Get("http://" + ln.Addr().String() + "/img/icons/" + icon)
+		if err != nil {
+			continue
 		}
-		r.Body.Close()
+		defer r.Body.Close()
+
+		o, err := os.Create(path)
+		if err != nil {
+			continue
+		}
+		defer o.Close()
+
+		io.Copy(o, r.Body)
 	}
 
 	return
@@ -343,22 +351,10 @@ func (h *harvester) createMenu(trayIcon string) {
 					if h.mainWindow != nil && h.mainWindow.IsShown() {
 						h.mainWindow.OpenDevTools()
 					}
-					if h.settingsWindow != nil && h.settingsWindow.IsShown() {
-						h.settingsWindow.OpenDevTools()
-					}
-					if h.timesheetWindow != nil && h.timesheetWindow.IsShown() {
-						h.timesheetWindow.OpenDevTools()
-					}
 				} else {
 					h.debug = true
 					if h.mainWindow != nil && h.mainWindow.IsShown() {
 						h.mainWindow.CloseDevTools()
-					}
-					if h.settingsWindow != nil && h.settingsWindow.IsShown() {
-						h.settingsWindow.CloseDevTools()
-					}
-					if h.timesheetWindow != nil && h.timesheetWindow.IsShown() {
-						h.timesheetWindow.CloseDevTools()
 					}
 				}
 				return
