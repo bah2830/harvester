@@ -7,7 +7,7 @@ import (
 	"time"
 
 	jira "github.com/andygrunwald/go-jira"
-	"github.com/jinzhu/gorm"
+	"github.com/dgraph-io/badger"
 )
 
 var (
@@ -15,16 +15,13 @@ var (
 )
 
 type TaskTimer struct {
-	ID        int        `gorm:"primary_key;AUTO_INCREMENT"`
-	Key       string     `gorm:"index:key" json:"key"`
-	StartedAt time.Time  `gorm:"index:started_at" json:"startedAt"`
-	StoppedAt *time.Time `gorm:"index:stopped_at;default:NULL" json:"stoppedAt"`
-
-	Running bool   `gorm:"-" json:"running"`
-	Runtime string `gorm:"-" json:"runtime"`
-
-	Jira    *jira.Issue  `gorm:"-" json:"jira"`
-	Harvest *harvestTask `gorm:"-" json:"harvest"`
+	Key       string       `json:"key"`
+	StartedAt time.Time    `json:"startedAt"`
+	StoppedAt *time.Time   `json:"stoppedAt"`
+	Running   bool         `json:"running"`
+	Runtime   string       `json:"runtime"`
+	Jira      *jira.Issue  `json:"jira"`
+	Harvest   *harvestTask `json:"harvest"`
 }
 
 type TaskTimers []*TaskTimer
@@ -143,7 +140,7 @@ func (t *TaskTimer) CurrentRuntime() string {
 }
 
 // StartJiraPurger will check for old jiras every few hours and purge any that are more than 90 days old
-func StartJiraPurger(db *gorm.DB) {
+func StartJiraPurger(db *badger.DB) {
 	purge := func() error {
 		r := db.Where("started_at < ?", time.Now().UTC().Add(-90*24*time.Hour)).Delete(&TaskTimer{})
 		return r.Error
@@ -170,7 +167,7 @@ func (timers TaskTimers) GetByKey(key string) (*TaskTimer, error) {
 	return nil, ErrTimerNotExists
 }
 
-func GetKeysWithTimes(db *gorm.DB, start, end time.Time) ([]string, error) {
+func GetKeysWithTimes(db *badger.DB, start, end time.Time) ([]string, error) {
 	keyStructs := make([]struct{ Key string }, 0)
 	if err := db.Table("task_timers").Select("key").Where("started_at between ? and ?", start, end).Group("key").Scan(&keyStructs).Error; err != nil {
 		return nil, err

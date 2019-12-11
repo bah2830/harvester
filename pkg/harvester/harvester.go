@@ -14,6 +14,7 @@ import (
 	"github.com/asticode/go-astilectron"
 	astiptr "github.com/asticode/go-astitools/ptr"
 	"github.com/bah2830/harvester/pkg/assets"
+	"github.com/dgraph-io/badger"
 	"github.com/jinzhu/gorm"
 	"github.com/pkg/errors"
 )
@@ -24,7 +25,7 @@ type harvester struct {
 	mainWindow    *Window
 	Settings      *Settings `json:"settings"`
 	changeCh      chan bool
-	db            *gorm.DB
+	db            *badger.DB
 	jiraClient    *jira.Client
 	harvestClient *HarvestClient
 	harvestURL    *url.URL
@@ -38,7 +39,7 @@ type Timers struct {
 	Tasks TaskTimers `json:"tasks"`
 }
 
-func NewHarvester(db *gorm.DB) (*harvester, error) {
+func NewHarvester(db *badger.DB) (*harvester, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, err
