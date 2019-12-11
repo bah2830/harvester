@@ -21,10 +21,10 @@ type Window struct {
 }
 
 type AppData struct {
-	View     string    `json:"view"`
-	Timers   *Timers   `json:"timers"`
-	Settings *Settings `json:"settings"`
-	Error    string    `json:"error"`
+	View     string     `json:"view"`
+	Timers   TaskTimers `json:"timers"`
+	Settings *Settings  `json:"settings"`
+	Error    string     `json:"error"`
 }
 
 func (h *harvester) createWindow() error {
@@ -82,11 +82,10 @@ func (h *harvester) renderMainWindow() error {
 	} else {
 		h.mainWindow.SetBounds(astilectron.RectangleOptions{
 			SizeOptions: astilectron.SizeOptions{
-				Height: astiptr.Int(200),
-				Width:  astiptr.Int(350),
+				Width: astiptr.Int(350),
 			},
 		})
-		h.mainWindow.sendMessage(&AppData{View: "main"})
+		h.sendTimers(false, true)
 		h.Refresh()
 	}
 
@@ -234,7 +233,7 @@ func (h *harvester) mainListener(ready chan bool) {
 
 				var noProjects string
 				for _, k := range keys {
-					tracker, err := h.Timers.Tasks.GetByKey(k)
+					tracker, err := h.Timers.GetByKey(k)
 					if err == nil {
 						if tracker.Harvest == nil {
 							noProjects += fmt.Sprintf("\n%s; %s", tracker.Key, tracker.Jira.Fields.Summary)
@@ -256,7 +255,7 @@ func (h *harvester) mainListener(ready chan bool) {
 			return timesheet
 		case strings.Contains(data, "|"):
 			parts := strings.Split(data, "|")
-			task, err := h.Timers.Tasks.GetByKey(parts[1])
+			task, err := h.Timers.GetByKey(parts[1])
 			if err != nil {
 				h.sendErr(err)
 				return err
@@ -275,7 +274,7 @@ func (h *harvester) mainListener(ready chan bool) {
 				return err
 			}
 
-			h.sendTimers(false)
+			h.sendTimers(false, false)
 		default:
 			log.Println("unknown rpc handler " + data)
 		}
@@ -291,16 +290,21 @@ func (h *harvester) sendErr(err error) {
 	h.mainWindow.SendMessage(current)
 }
 
-func (h *harvester) sendTimers(auto bool) {
-	if h.mainWindow.View != "main" {
+func (h *harvester) sendTimers(auto, force bool) {
+	if !force && h.mainWindow.View != "main" {
 		return
+	}
+
+	for _, t := range h.Timers {
+		t.Running = (t.StartedAt != nil)
+		t.Runtime = t.CurrentRuntime()
 	}
 
 	h.mainWindow.sendMessage(&AppData{View: "main", Timers: h.Timers})
 
 	// Change the height of the window to match the number of timers
 	if auto {
-		height := 64 + len(h.Timers.Tasks)*40
+		height := 64 + len(h.Timers)*40
 		h.mainWindow.SetBounds(astilectron.RectangleOptions{
 			SizeOptions: astilectron.SizeOptions{
 				Height: astiptr.Int(height),

@@ -40,16 +40,17 @@ func (h *harvester) getTimeSheet(startTime, endTime time.Time) (*TimeSheet, erro
 
 	times := make(map[string]TaskTimeInfo, 0)
 	for _, timer := range timers {
-		if timer.StartedAt.Before(startTime) {
+		// If a timer is currently running for this key then add the duration to it
+		if runningTimer, err := h.Timers.GetByKey(timer.Key); err == nil {
+			if runningTimer.StartedAt != nil && runningTimer.StartedAt.Format("20060102") == timer.Day.Format("20060102") {
+				timer.Duration = timer.Duration + time.Since(*runningTimer.StartedAt)
+			}
+		}
+
+		if timer.Day.Before(startTime) {
 			continue
 		}
-
-		stoppedDate := time.Now()
-		if timer.StoppedAt != nil {
-			stoppedDate = (*timer.StoppedAt).Local()
-		}
-
-		if timer.StoppedAt == nil || stoppedDate.After(endTime) {
+		if timer.Day.After(endTime) {
 			break
 		}
 
@@ -62,8 +63,8 @@ func (h *harvester) getTimeSheet(startTime, endTime time.Time) (*TimeSheet, erro
 			}
 		}
 
-		day := day(viewType, timer.StartedAt.Local())
-		runTime := stoppedDate.Sub(timer.StartedAt.Local()).Hours()
+		day := day(viewType, timer.Day.Local())
+		runTime := timer.Duration.Hours()
 
 		jiraTracker.Durations[day] = jiraTracker.Durations[day] + runTime
 		jiraTracker.TotalTime = jiraTracker.TotalTime + runTime

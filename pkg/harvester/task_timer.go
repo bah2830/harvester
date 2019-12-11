@@ -9,6 +9,7 @@ import (
 
 	jira "github.com/andygrunwald/go-jira"
 	"github.com/dgraph-io/badger"
+	"github.com/jinzhu/now"
 )
 
 var (
@@ -16,17 +17,22 @@ var (
 )
 
 type TaskTimer struct {
-	DBKey     []byte       `json:"-"`
 	Key       string       `json:"key"`
 	StartedAt *time.Time   `json:"startedAt"`
-	StoppedAt *time.Time   `json:"stoppedAt"`
 	Running   bool         `json:"running"`
 	Runtime   string       `json:"runtime"`
 	Jira      *jira.Issue  `json:"jira"`
 	Harvest   *harvestTask `json:"harvest"`
 }
-
 type TaskTimers []*TaskTimer
+
+type StoredTimer struct {
+	dbKey    []byte
+	Key      string        `json:"key"`
+	Day      time.Time     `json:"day"`
+	Duration time.Duration `json:"duration"`
+}
+type StoredTimers []StoredTimer
 
 func (h *harvester) StartTimer(t *TaskTimer) error {
 	if err := h.stopAllTimers(); err != nil {
@@ -42,10 +48,6 @@ func (h *harvester) StartTimer(t *TaskTimer) error {
 		Running:   true,
 	}
 	newTimer.Runtime = newTimer.CurrentRuntime()
-
-	if err := h.saveTimer(newTimer); err != nil {
-		return err
-	}
 
 	// If a harvest task exists start the timer for it
 	if newTimer.Harvest != nil {
@@ -63,9 +65,44 @@ func (h *harvester) StopTimer(t *TaskTimer) error {
 		return nil
 	}
 
-	stoppedAt := time.Now().UTC()
-	t.StoppedAt = &stoppedAt
-	if err := h.saveTimer(t); err != nil {
+	// Get any existing times in the database
+	var timer *StoredTimer
+	err := h.db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get(t.getDBKey())
+		if err != nil {
+			if err == badger.ErrKeyNotFound {
+				return nil
+			}
+			return err
+		}
+
+		return item.Value(func(val []byte) error {
+			return json.Unmarshal(val, &timer)
+		})
+	})
+	if err != nil {
+		return err
+	}
+
+	if timer == nil {
+		timer = &StoredTimer{
+			Key:      t.Key,
+			Day:      now.BeginningOfDay(),
+			Duration: time.Since(*t.StartedAt),
+		}
+	} else {
+		timer.Duration = timer.Duration + time.Since(*t.StartedAt)
+	}
+
+	err = h.db.Update(func(txn *badger.Txn) error {
+		data, err := json.Marshal(timer)
+		if err != nil {
+			return err
+		}
+
+		return txn.Set(t.getDBKey(), data)
+	})
+	if err != nil {
 		return err
 	}
 
@@ -84,7 +121,7 @@ func (h *harvester) StopTimer(t *TaskTimer) error {
 }
 
 func (t *TaskTimer) getDBKey() []byte {
-	return []byte(fmt.Sprintf("timer.%s.%s", t.StartedAt.Format("20060102_150405.99"), t.Key))
+	return []byte(fmt.Sprintf("timer.%s.%s", t.Key, t.StartedAt.Format("20060102")))
 }
 
 func (h *harvester) saveTimer(t *TaskTimer) error {
@@ -102,48 +139,14 @@ func (h *harvester) saveTimer(t *TaskTimer) error {
 }
 
 func (h *harvester) replaceTask(t *TaskTimer) {
-	for i, task := range h.Timers.Tasks {
+	for i, task := range h.Timers {
 		if task.Key == t.Key {
-			h.Timers.Tasks[i] = t
+			h.Timers[i] = t
 			return
 		}
 	}
 
-	h.Timers.Tasks = append(h.Timers.Tasks, t)
-}
-
-func (h *harvester) GetActiveTimers() (TaskTimers, error) {
-	allTimers, err := getTimersByOpts(h.db, badger.DefaultIteratorOptions)
-	if err != nil {
-		return nil, err
-	}
-
-	var timers TaskTimers
-	for _, timer := range allTimers {
-		if timer.StoppedAt != nil {
-			continue
-		}
-
-		if h.jiraClient != nil {
-			jira, err := h.getJiraByKey(timer.Key)
-			if err != nil {
-				return nil, err
-			}
-			timer.Jira = jira
-		}
-		if h.harvestClient != nil {
-			harvestTask, err := h.harvestClient.getUserProjectByKey(timer.Key)
-			if err != nil {
-				return nil, err
-			}
-			timer.Harvest = harvestTask
-		}
-
-		timer.Runtime = timer.CurrentRuntime()
-		timers = append(timers, timer)
-	}
-
-	return timers, nil
+	h.Timers = append(h.Timers, t)
 }
 
 func (t *TaskTimer) CurrentRuntime() string {
@@ -158,20 +161,18 @@ func (t *TaskTimer) CurrentRuntime() string {
 // StartJiraPurger will check for old jiras every few hours and purge any that are more than 90 days old
 func StartJiraPurger(db *badger.DB) {
 	purge := func() error {
-		opts := badger.DefaultIteratorOptions
-		opts.PrefetchValues = false
-		timers, err := getTimersByOpts(db, opts)
+		timers, err := getTimersByOpts(db, badger.DefaultIteratorOptions)
 		if err != nil {
 			return err
 		}
 
 		return db.Update(func(txn *badger.Txn) error {
 			for _, timer := range timers {
-				if time.Since(*timer.StartedAt).Hours() < (90 * 24) {
+				if time.Since(timer.Day).Hours() < (90 * 24) {
 					return nil
 				}
 
-				if err := txn.Delete(timer.DBKey); err != nil {
+				if err := txn.Delete(timer.dbKey); err != nil {
 					return err
 				}
 			}
@@ -208,10 +209,10 @@ func GetKeysWithTimes(db *badger.DB, start, end time.Time) ([]string, error) {
 
 	var keys []string
 	for _, timer := range timers {
-		if timer.StartedAt.Before(start) {
+		if timer.Day.Before(start) {
 			continue
 		}
-		if timer.StoppedAt == nil || timer.StoppedAt.After(end) {
+		if timer.Day.After(end) {
 			break
 		}
 		keys = append(keys, timer.Key)
@@ -220,28 +221,28 @@ func GetKeysWithTimes(db *badger.DB, start, end time.Time) ([]string, error) {
 	return keys, nil
 }
 
-func getTimersByOpts(db *badger.DB, opts badger.IteratorOptions) (TaskTimers, error) {
+func getTimersByOpts(db *badger.DB, opts badger.IteratorOptions) (StoredTimers, error) {
 	if opts.Prefix == nil {
 		opts.Prefix = []byte("timer.")
 	}
 
-	var timers TaskTimers
+	var timers StoredTimers
 	err := db.View(func(txn *badger.Txn) error {
 		iter := txn.NewIterator(opts)
 		defer iter.Close()
 		for iter.Rewind(); iter.Valid(); iter.Next() {
 			item := iter.Item()
 
-			var taskTimer TaskTimer
+			var timer StoredTimer
 			err := item.Value(func(v []byte) error {
-				return json.Unmarshal(v, &taskTimer)
+				return json.Unmarshal(v, &timer)
 			})
 			if err != nil {
 				return err
 			}
 
-			taskTimer.DBKey = item.KeyCopy(nil)
-			timers = append(timers, &taskTimer)
+			timer.dbKey = item.KeyCopy(nil)
+			timers = append(timers, timer)
 		}
 		return nil
 	})
