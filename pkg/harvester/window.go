@@ -171,9 +171,7 @@ func (h *harvester) mainListener(ready chan bool) {
 			}
 
 			if h.Settings == nil {
-				h.Settings = &Settings{
-					RefreshInterval: defaultRefreshInterval,
-				}
+				h.Settings = &Settings{}
 			}
 
 			h.Settings.Jira = SettingsData{

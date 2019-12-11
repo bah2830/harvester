@@ -29,6 +29,7 @@ type harvester struct {
 	harvestClient *HarvestClient
 	harvestURL    *url.URL
 	Timers        *Timers `json:"timers"`
+	CurrentTimer  *TaskTimer
 	listener      net.Listener
 	debug         bool
 }
@@ -63,11 +64,9 @@ func NewHarvester(db *gorm.DB) (*harvester, error) {
 	}
 
 	h := &harvester{
-		app: app,
-		db:  db,
-		Settings: &Settings{
-			RefreshInterval: defaultRefreshInterval,
-		},
+		app:      app,
+		db:       db,
+		Settings: &Settings{},
 		changeCh: make(chan bool),
 		Timers: &Timers{
 			Tasks: TaskTimers{},
@@ -103,9 +102,14 @@ func (h *harvester) Start() {
 		h.sendErr(err)
 	}
 
-	tick := time.NewTicker(previousSettings.RefreshInterval)
+	tick := time.NewTicker(defaultRefreshInterval)
 	for {
 		select {
+		case <-time.After(10 * time.Second):
+			if h.CurrentTimer != nil {
+				h.updateTimers(h.CurrentTimer.Key)
+				h.sendTimers(false)
+			}
 		case <-tick.C:
 			if err := h.Refresh(); err != nil {
 				h.sendErr(err)
@@ -114,11 +118,6 @@ func (h *harvester) Start() {
 			if err := h.Settings.Save(h.db); err != nil {
 				h.sendErr(err)
 				continue
-			}
-
-			// If refresh interval changed update the ticket
-			if previousSettings.RefreshInterval != h.Settings.RefreshInterval {
-				tick = time.NewTicker(h.Settings.RefreshInterval)
 			}
 
 			// If the jira credentials changed get a new client

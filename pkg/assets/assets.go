@@ -853,7 +853,7 @@ func jsAppJs() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "js/app.js", size: 1847523, mode: os.FileMode(420), modTime: time.Unix(1576013590, 0)}
+	info := bindataFileInfo{name: "js/app.js", size: 1847523, mode: os.FileMode(420), modTime: time.Unix(1576025527, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }

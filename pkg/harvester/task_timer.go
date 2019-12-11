@@ -31,17 +31,9 @@ type TaskTimers []*TaskTimer
 
 func (h *harvester) StartTimer(t *TaskTimer) error {
 	// Make sure an existing timer doesn't already exist
-	existingTimers, err := h.GetActiveTimers()
-	if err != nil {
-		return err
-	}
-
-	// Stop the current timers before starting the new one
-	if len(existingTimers) > 0 {
-		for _, timer := range existingTimers {
-			if err := h.StopTimer(timer); err != nil {
-				return err
-			}
+	if h.CurrentTimer != nil {
+		if err := h.StopTimer(h.CurrentTimer); err != nil {
+			return err
 		}
 	}
 
@@ -67,7 +59,7 @@ func (h *harvester) StartTimer(t *TaskTimer) error {
 
 	t.Running = true
 	t.Runtime = t.CurrentRuntime()
-
+	h.CurrentTimer = t
 	return nil
 }
 
@@ -88,6 +80,7 @@ func (h *harvester) StopTimer(t *TaskTimer) error {
 	}
 
 	t.Running = false
+	h.CurrentTimer = nil
 	return nil
 }
 

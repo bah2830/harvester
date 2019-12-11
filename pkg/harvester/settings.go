@@ -9,16 +9,15 @@ import (
 )
 
 const (
-	defaultRefreshInterval = 1 * time.Minute
+	defaultRefreshInterval = 5 * time.Minute
 )
 
 type Settings struct {
 	ID       int `gorm:"primary_key;AUTO_INCREMENT"`
 	Settings string
 
-	RefreshInterval time.Duration `gorm:"-"`
-	Jira            SettingsData  `gorm:"-" json:"jira"`
-	Harvest         SettingsData  `gorm:"-" json:"harvest"`
+	Jira    SettingsData `gorm:"-" json:"jira"`
+	Harvest SettingsData `gorm:"-" json:"harvest"`
 }
 
 type SettingsData struct {
