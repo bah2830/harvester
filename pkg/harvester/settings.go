@@ -12,8 +12,8 @@ const (
 )
 
 type Settings struct {
-	Jira    SettingsData
-	Harvest SettingsData
+	Jira    SettingsData `json:"jira"`
+	Harvest SettingsData `json:"harvest"`
 }
 
 type SettingsData struct {

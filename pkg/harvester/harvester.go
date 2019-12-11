@@ -15,7 +15,6 @@ import (
 	astiptr "github.com/asticode/go-astitools/ptr"
 	"github.com/bah2830/harvester/pkg/assets"
 	"github.com/dgraph-io/badger"
-	"github.com/jinzhu/gorm"
 	"github.com/pkg/errors"
 )
 
@@ -30,7 +29,6 @@ type harvester struct {
 	harvestClient *HarvestClient
 	harvestURL    *url.URL
 	Timers        *Timers `json:"timers"`
-	CurrentTimer  *TaskTimer
 	listener      net.Listener
 	debug         bool
 }
@@ -107,10 +105,7 @@ func (h *harvester) Start() {
 	for {
 		select {
 		case <-time.After(10 * time.Second):
-			if h.CurrentTimer != nil {
-				h.updateTimers(h.CurrentTimer.Key)
-				h.sendTimers(false)
-			}
+			h.sendTimers(false)
 		case <-tick.C:
 			if err := h.Refresh(); err != nil {
 				h.sendErr(err)
@@ -238,7 +233,7 @@ func (h *harvester) Refresh() error {
 
 func (h *harvester) init() error {
 	settings, err := GetSettings(h.db)
-	if err != nil && !gorm.IsRecordNotFoundError(err) {
+	if err != nil && err != badger.ErrKeyNotFound {
 		log.Println(err)
 	}
 

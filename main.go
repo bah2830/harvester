@@ -5,10 +5,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/dgraph-io/badger"
-
 	"github.com/bah2830/harvester/pkg/harvester"
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/dgraph-io/badger"
 )
 
 const (

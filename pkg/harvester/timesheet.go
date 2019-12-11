@@ -4,6 +4,8 @@ import (
 	"math"
 	"sort"
 	"time"
+
+	"github.com/dgraph-io/badger"
 )
 
 type TimeSheet struct {
@@ -28,10 +30,9 @@ func (h *harvester) getTimeSheet(startTime, endTime time.Time) (*TimeSheet, erro
 		days = 7
 	}
 
-	var timers []TaskTimer
-	r := h.db.Where("started_at BETWEEN ? AND ?", startTime, endTime).Find(&timers)
-	if r.Error != nil {
-		return nil, r.Error
+	timers, err := getTimersByOpts(h.db, badger.DefaultIteratorOptions)
+	if err != nil {
+		return nil, err
 	}
 
 	var total float64
@@ -39,9 +40,17 @@ func (h *harvester) getTimeSheet(startTime, endTime time.Time) (*TimeSheet, erro
 
 	times := make(map[string]TaskTimeInfo, 0)
 	for _, timer := range timers {
+		if timer.StartedAt.Before(startTime) {
+			continue
+		}
+
 		stoppedDate := time.Now()
 		if timer.StoppedAt != nil {
 			stoppedDate = (*timer.StoppedAt).Local()
+		}
+
+		if timer.StoppedAt == nil || stoppedDate.After(endTime) {
+			break
 		}
 
 		// Find an existing tracker, if none exists create it.

@@ -262,10 +262,8 @@ func (h *harvester) mainListener(ready chan bool) {
 				return err
 			}
 
-			var currentRunning string
 			switch parts[0] {
 			case "start":
-				currentRunning = task.Key
 				err = h.StartTimer(task)
 			case "stop":
 				err = h.StopTimer(task)
@@ -277,7 +275,6 @@ func (h *harvester) mainListener(ready chan bool) {
 				return err
 			}
 
-			h.updateTimers(currentRunning)
 			h.sendTimers(false)
 		default:
 			log.Println("unknown rpc handler " + data)
