@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/bah2830/harvester/pkg/harvester"
+	"github.com/brentahughes/harvester/pkg/harvester"
 	"github.com/dgraph-io/badger"
 )
 

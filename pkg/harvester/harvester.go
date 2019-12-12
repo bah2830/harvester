@@ -13,7 +13,7 @@ import (
 	jira "github.com/andygrunwald/go-jira"
 	"github.com/asticode/go-astilectron"
 	astiptr "github.com/asticode/go-astitools/ptr"
-	"github.com/bah2830/harvester/pkg/assets"
+	"github.com/brentahughes/harvester/pkg/assets"
 	"github.com/dgraph-io/badger"
 	"github.com/pkg/errors"
 )

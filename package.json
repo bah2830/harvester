@@ -9,15 +9,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bah2830/harvester.git"
+    "url": "git+https://github.com/brentahughes/harvester.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/bah2830/harvester/issues"
+    "url": "https://github.com/brentahughes/harvester/issues"
   },
-  "homepage": "https://github.com/bah2830/harvester#readme",
+  "homepage": "https://github.com/brentahughes/harvester#readme",
   "devDependencies": {
     "@babel/core": "^7.7.4",
     "@babel/preset-env": "^7.7.4",
