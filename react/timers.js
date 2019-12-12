@@ -4,7 +4,7 @@ import { Timer } from './timer';
 export class Timers extends React.Component {
     render() {
         const rows = [];
-        appData.data.timers.tasks.forEach(function (timer, i) {
+        appData.data.timers.forEach(function (timer, i) {
             rows.push(<Timer key={i} timer={timer} />);
         });
 

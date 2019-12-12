@@ -9,14 +9,12 @@ require (
 	github.com/asticode/go-astitools v1.2.0
 	github.com/atotto/clipboard v0.1.2
 	github.com/becoded/go-harvest v0.0.0-20191118150442-2825a596cd0a
-	github.com/golang/protobuf v1.3.1 // indirect
-	github.com/jinzhu/gorm v1.9.11
+	github.com/dgraph-io/badger v1.6.0
 	github.com/jinzhu/now v1.1.1
 	github.com/julienschmidt/httprouter v1.3.0 // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/mattn/go-colorable v0.1.4 // indirect
 	github.com/mattn/go-isatty v0.0.10 // indirect
-	github.com/mattn/go-sqlite3 v1.12.0
 	github.com/pkg/errors v0.8.1
 	github.com/sirupsen/logrus v1.4.2 // indirect
 	github.com/skratchdot/open-golang v0.0.0-20190402232053-79abb63cd66e

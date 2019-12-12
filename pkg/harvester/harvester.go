@@ -14,7 +14,7 @@ import (
 	"github.com/asticode/go-astilectron"
 	astiptr "github.com/asticode/go-astitools/ptr"
 	"github.com/bah2830/harvester/pkg/assets"
-	"github.com/jinzhu/gorm"
+	"github.com/dgraph-io/badger"
 	"github.com/pkg/errors"
 )
 
@@ -24,21 +24,16 @@ type harvester struct {
 	mainWindow    *Window
 	Settings      *Settings `json:"settings"`
 	changeCh      chan bool
-	db            *gorm.DB
+	db            *badger.DB
 	jiraClient    *jira.Client
 	harvestClient *HarvestClient
 	harvestURL    *url.URL
-	Timers        *Timers `json:"timers"`
-	CurrentTimer  *TaskTimer
+	Timers        TaskTimers `json:"timers"`
 	listener      net.Listener
 	debug         bool
 }
 
-type Timers struct {
-	Tasks TaskTimers `json:"tasks"`
-}
-
-func NewHarvester(db *gorm.DB) (*harvester, error) {
+func NewHarvester(db *badger.DB) (*harvester, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, err
@@ -68,9 +63,7 @@ func NewHarvester(db *gorm.DB) (*harvester, error) {
 		db:       db,
 		Settings: &Settings{},
 		changeCh: make(chan bool),
-		Timers: &Timers{
-			Tasks: TaskTimers{},
-		},
+		Timers:   TaskTimers{},
 		listener: ln,
 	}
 
@@ -106,10 +99,7 @@ func (h *harvester) Start() {
 	for {
 		select {
 		case <-time.After(10 * time.Second):
-			if h.CurrentTimer != nil {
-				h.updateTimers(h.CurrentTimer.Key)
-				h.sendTimers(false)
-			}
+			h.sendTimers(false, false)
 		case <-tick.C:
 			if err := h.Refresh(); err != nil {
 				h.sendErr(err)
@@ -148,10 +138,8 @@ func (h *harvester) Start() {
 }
 
 func (h *harvester) Refresh() error {
-	// Get any current timers running in the local database
-	timers, err := h.GetActiveTimers()
-	if err != nil {
-		return err
+	if h.Timers == nil {
+		h.Timers = TaskTimers{}
 	}
 
 	// Add jira details to any timers
@@ -164,16 +152,15 @@ func (h *harvester) Refresh() error {
 		// Add jiras to timers
 		for _, jira := range issues {
 			jiraIssue := jira
-			timer, err := timers.GetByKey(jira.Key)
-			if err != nil {
+			timer, err := h.Timers.GetByKey(jira.Key)
+			if err != nil && err == ErrTimerNotExists {
 				timer = &TaskTimer{
-					Key:  jira.Key,
-					Jira: &jiraIssue,
+					Key: jira.Key,
 				}
-				timers = append(timers, timer)
-				continue
 			}
+
 			timer.Jira = &jiraIssue
+			h.replaceTask(timer)
 		}
 	}
 
@@ -195,15 +182,11 @@ func (h *harvester) Refresh() error {
 
 		// Add harvest projects to timers
 		for _, task := range tasks {
-			var newTimer bool
-
 			harvestTask := *task
-			timer, err := timers.GetByKey(*task.Project.Code)
-			if err != nil {
-				newTimer = true
+			timer, err := h.Timers.GetByKey(*task.Project.Code)
+			if err != nil && err == ErrTimerNotExists {
 				timer = &TaskTimer{
-					Key:     *task.Project.Code,
-					Harvest: &harvestTask,
+					Key: *task.Project.Code,
 				}
 			}
 
@@ -217,19 +200,16 @@ func (h *harvester) Refresh() error {
 
 			timer.Harvest = &harvestTask
 
-			if newTimer {
-				timers = append(timers, timer)
-			}
+			h.replaceTask(timer)
 		}
 	}
 
-	sort.SliceStable(timers, func(a, b int) bool {
-		return sort.StringsAreSorted([]string{timers[a].Key, timers[b].Key})
+	sort.SliceStable(h.Timers, func(a, b int) bool {
+		return sort.StringsAreSorted([]string{h.Timers[a].Key, h.Timers[b].Key})
 	})
-	h.Timers.Tasks = timers
 
 	if h.mainWindow != nil {
-		h.sendTimers(true)
+		h.sendTimers(true, false)
 	}
 
 	return nil
@@ -237,7 +217,7 @@ func (h *harvester) Refresh() error {
 
 func (h *harvester) init() error {
 	settings, err := GetSettings(h.db)
-	if err != nil && !gorm.IsRecordNotFoundError(err) {
+	if err != nil && err != badger.ErrKeyNotFound {
 		log.Println(err)
 	}
 
@@ -265,7 +245,7 @@ func (h *harvester) init() error {
 }
 
 func (h *harvester) stopAllTimers() error {
-	for _, timer := range h.Timers.Tasks {
+	for _, timer := range h.Timers {
 		if err := h.StopTimer(timer); err != nil {
 			return err
 		}
@@ -283,7 +263,6 @@ func (h *harvester) Stop() {
 	}
 
 	h.listener.Close()
-
 	h.mainWindow.Close()
 	h.app.Close()
 }
@@ -336,7 +315,7 @@ func (h *harvester) createMenu(trayIcon string) {
 			Label: astiptr.Str("Stop Timers"),
 			OnClick: func(e astilectron.Event) (deleteListener bool) {
 				h.stopAllTimers()
-				h.sendTimers(false)
+				h.sendTimers(false, false)
 				return
 			},
 		},

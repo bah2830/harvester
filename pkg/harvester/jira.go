@@ -10,12 +10,7 @@ import (
 	jira "github.com/andygrunwald/go-jira"
 )
 
-const (
-	issueQuery = `assignee = currentUser()
-		AND Resolution = Unresolved
-		AND status not in ("To Do", "Selected")
-		ORDER BY updated DESC, status DESC`
-)
+const issueQuery = `assignee = currentUser() AND Resolution = Unresolved AND status not in ("To Do", "Selected")`
 
 func (h *harvester) getNewJiraClient() error {
 	tp := jira.BasicAuthTransport{
@@ -27,13 +22,9 @@ func (h *harvester) getNewJiraClient() error {
 		},
 	}
 
-	jiraClient, err := jira.NewClient(tp.Client(), h.Settings.Jira.URL)
-	if err != nil {
-		return err
-	}
-
-	h.jiraClient = jiraClient
-	return nil
+	var err error
+	h.jiraClient, err = jira.NewClient(tp.Client(), h.Settings.Jira.URL)
+	return err
 }
 
 func (h *harvester) getUsersActiveIssues() ([]jira.Issue, error) {

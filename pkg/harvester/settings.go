@@ -1,11 +1,10 @@
 package harvester
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"time"
 
-	"github.com/jinzhu/gorm"
+	"github.com/dgraph-io/badger"
 )
 
 const (
@@ -13,11 +12,8 @@ const (
 )
 
 type Settings struct {
-	ID       int `gorm:"primary_key;AUTO_INCREMENT"`
-	Settings string
-
-	Jira    SettingsData `gorm:"-" json:"jira"`
-	Harvest SettingsData `gorm:"-" json:"harvest"`
+	Jira    SettingsData `json:"jira"`
+	Harvest SettingsData `json:"harvest"`
 }
 
 type SettingsData struct {
@@ -26,36 +22,34 @@ type SettingsData struct {
 	Pass string `json:"pass"`
 }
 
-func (s *Settings) Save(db *gorm.DB) error {
-	// Clear the encoded settings string
-	s.Settings = ""
-
+func (s *Settings) Save(db *badger.DB) error {
 	settings, err := json.Marshal(s)
 	if err != nil {
 		return err
 	}
 
-	if s.ID == 0 {
-		return db.Create(s).Error
-	}
-
-	base64Settings := base64.StdEncoding.EncodeToString(settings)
-	s.Settings = base64Settings
-	return db.Save(s).Error
+	return db.Update(func(txn *badger.Txn) error {
+		return txn.Set([]byte("settings"), settings)
+	})
 }
 
-func GetSettings(db *gorm.DB) (*Settings, error) {
-	var settings Settings
-	if err := db.Last(&settings).Error; err != nil {
-		return nil, err
-	}
+func GetSettings(db *badger.DB) (*Settings, error) {
+	var settingsValue []byte
+	err := db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte("settings"))
+		if err != nil {
+			return err
+		}
 
-	decodedSettings, err := base64.StdEncoding.DecodeString(settings.Settings)
+		settingsValue, err = item.ValueCopy(nil)
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	if err := json.Unmarshal(decodedSettings, &settings); err != nil {
+	var settings Settings
+	if err := json.Unmarshal(settingsValue, &settings); err != nil {
 		return nil, err
 	}
 

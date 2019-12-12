@@ -6,8 +6,7 @@ import (
 	"os"
 
 	"github.com/bah2830/harvester/pkg/harvester"
-	"github.com/jinzhu/gorm"
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/dgraph-io/badger"
 )
 
 const (
@@ -15,7 +14,7 @@ const (
 )
 
 var (
-	dbFile = flag.String("db.file", "", "Path to the local database")
+	dbDir = flag.String("db.dir", "", "Path to the local database directory")
 )
 
 func main() {
@@ -26,22 +25,17 @@ func main() {
 		log.Fatalln("Unable to get user home directory", err)
 	}
 
-	if *dbFile == "" {
-		*dbFile = home + "/.harvester/harvester.db"
+	if *dbDir == "" {
+		*dbDir = home + "/.harvester/db"
 	}
 
-	log.Printf("using database file at %s", *dbFile)
+	log.Printf("using database dir at %s", *dbDir)
 
-	db, err := gorm.Open("sqlite3", *dbFile)
+	db, err := badger.Open(badger.DefaultOptions(*dbDir))
 	if err != nil {
-		log.Fatalln("Unable to open sql database", err)
+		log.Fatal("Unable to open database", err)
 	}
 	defer db.Close()
-
-	// Build the database schema if needed
-	if err := db.AutoMigrate(&harvester.Settings{}, &harvester.TaskTimer{}).Error; err != nil {
-		log.Fatalln("Migration error", err)
-	}
 
 	h, err := harvester.NewHarvester(db)
 	if err != nil {

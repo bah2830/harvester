@@ -4,6 +4,8 @@ import (
 	"math"
 	"sort"
 	"time"
+
+	"github.com/dgraph-io/badger"
 )
 
 type TimeSheet struct {
@@ -28,10 +30,9 @@ func (h *harvester) getTimeSheet(startTime, endTime time.Time) (*TimeSheet, erro
 		days = 7
 	}
 
-	var timers []TaskTimer
-	r := h.db.Where("started_at BETWEEN ? AND ?", startTime, endTime).Find(&timers)
-	if r.Error != nil {
-		return nil, r.Error
+	timers, err := getTimersByOpts(h.db, badger.DefaultIteratorOptions)
+	if err != nil {
+		return nil, err
 	}
 
 	var total float64
@@ -39,9 +40,18 @@ func (h *harvester) getTimeSheet(startTime, endTime time.Time) (*TimeSheet, erro
 
 	times := make(map[string]TaskTimeInfo, 0)
 	for _, timer := range timers {
-		stoppedDate := time.Now()
-		if timer.StoppedAt != nil {
-			stoppedDate = (*timer.StoppedAt).Local()
+		// If a timer is currently running for this key then add the duration to it
+		if runningTimer, err := h.Timers.GetByKey(timer.Key); err == nil {
+			if runningTimer.StartedAt != nil && runningTimer.StartedAt.Format("20060102") == timer.Day.Format("20060102") {
+				timer.Duration = timer.Duration + time.Since(*runningTimer.StartedAt)
+			}
+		}
+
+		if timer.Day.Before(startTime) {
+			continue
+		}
+		if timer.Day.After(endTime) {
+			break
 		}
 
 		// Find an existing tracker, if none exists create it.
@@ -53,8 +63,8 @@ func (h *harvester) getTimeSheet(startTime, endTime time.Time) (*TimeSheet, erro
 			}
 		}
 
-		day := day(viewType, timer.StartedAt.Local())
-		runTime := stoppedDate.Sub(timer.StartedAt.Local()).Hours()
+		day := day(viewType, timer.Day.Local())
+		runTime := timer.Duration.Hours()
 
 		jiraTracker.Durations[day] = jiraTracker.Durations[day] + runTime
 		jiraTracker.TotalTime = jiraTracker.TotalTime + runTime
