@@ -95,12 +95,19 @@ func (h *harvester) Start() {
 		h.sendErr(err)
 	}
 
-	tick := time.NewTicker(defaultRefreshInterval)
+	if err := h.backfillHarvest(); err != nil {
+		h.sendErr(err)
+	}
+
 	for {
 		select {
 		case <-time.After(10 * time.Second):
 			h.sendTimers(false, false)
-		case <-tick.C:
+		case <-time.After(time.Hour):
+			if err := h.backfillHarvest(); err != nil {
+				h.sendErr(err)
+			}
+		case <-time.After(defaultRefreshInterval):
 			if err := h.Refresh(); err != nil {
 				h.sendErr(err)
 			}

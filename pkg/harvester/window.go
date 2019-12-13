@@ -16,8 +16,9 @@ import (
 
 type Window struct {
 	*astilectron.Window
-	View        string
-	CurrentData *AppData
+	View              string
+	PreviousTimerSize int
+	CurrentData       *AppData
 }
 
 type AppData struct {
@@ -80,9 +81,14 @@ func (h *harvester) renderMainWindow() error {
 			h.mainWindow.sendMessage(&AppData{View: "main"})
 		}()
 	} else {
+		if h.mainWindow.PreviousTimerSize == 0 {
+			h.mainWindow.PreviousTimerSize = 200
+		}
+
 		h.mainWindow.SetBounds(astilectron.RectangleOptions{
 			SizeOptions: astilectron.SizeOptions{
-				Width: astiptr.Int(350),
+				Height: astiptr.Int(h.mainWindow.PreviousTimerSize),
+				Width:  astiptr.Int(350),
 			},
 		})
 		h.sendTimers(false, true)
@@ -105,7 +111,7 @@ func (h *harvester) renderSettings() error {
 func (h *harvester) renderTimesheet() error {
 	h.mainWindow.SetBounds(astilectron.RectangleOptions{
 		SizeOptions: astilectron.SizeOptions{
-			Height: astiptr.Int(500),
+			Height: astiptr.Int(400),
 			Width:  astiptr.Int(630),
 		},
 	})
@@ -305,11 +311,16 @@ func (h *harvester) sendTimers(auto, force bool) {
 	// Change the height of the window to match the number of timers
 	if auto {
 		height := 64 + len(h.Timers)*40
-		h.mainWindow.SetBounds(astilectron.RectangleOptions{
-			SizeOptions: astilectron.SizeOptions{
-				Height: astiptr.Int(height),
-			},
-		})
+
+		if h.mainWindow.PreviousTimerSize != height {
+			h.mainWindow.SetBounds(astilectron.RectangleOptions{
+				SizeOptions: astilectron.SizeOptions{
+					Height: astiptr.Int(height),
+				},
+			})
+
+			h.mainWindow.PreviousTimerSize = height
+		}
 	}
 }
 

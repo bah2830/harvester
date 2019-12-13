@@ -3,6 +3,7 @@ package harvester
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/becoded/go-harvest/harvest"
@@ -16,6 +17,18 @@ type HarvestClient struct {
 type harvestTask struct {
 	harvest.UserProjectAssignment
 	timer *harvest.TimeEntry
+}
+
+type harvestTasks []*harvestTask
+
+func (t harvestTasks) getByKey(key string) (*harvestTask, error) {
+	for _, task := range t {
+		if *task.Project.Code == key {
+			return task, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no task with key %s found", key)
 }
 
 func (h *harvester) getNewHarvestClient() error {
@@ -49,7 +62,7 @@ func (c *HarvestClient) getCompany() (*harvest.Company, error) {
 	return company, nil
 }
 
-func (c *HarvestClient) getUserProjects() ([]*harvestTask, error) {
+func (c *HarvestClient) getUserProjects() (harvestTasks, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -58,7 +71,7 @@ func (c *HarvestClient) getUserProjects() ([]*harvestTask, error) {
 		return nil, err
 	}
 
-	tasks := make([]*harvestTask, 0)
+	tasks := make(harvestTasks, 0)
 	for _, a := range asignments.UserAssignments {
 		if *a.IsProjectManager == false {
 			continue
@@ -147,19 +160,4 @@ func (t *harvestTask) stopTimer(client *HarvestClient) error {
 
 	t.timer = nil
 	return err
-}
-
-func (c *HarvestClient) getUserProjectByKey(key string) (*harvestTask, error) {
-	tasks, err := c.getUserProjects()
-	if err != nil {
-		return nil, err
-	}
-
-	for _, task := range tasks {
-		if *task.Project.Code == key {
-			return task, nil
-		}
-	}
-
-	return nil, nil
 }

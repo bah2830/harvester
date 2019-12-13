@@ -35,6 +35,29 @@ func (h *harvester) getTimeSheet(startTime, endTime time.Time) (*TimeSheet, erro
 		return nil, err
 	}
 
+	// Add any currently running timers that are not already stored
+CURRENT_TIMER:
+	for _, currentTimer := range h.Timers {
+		if currentTimer.StartedAt == nil {
+			continue
+		}
+
+		for _, timer := range timers {
+			if timer.Key == currentTimer.Key && timer.Day.YearDay() == currentTimer.StartedAt.YearDay() {
+				continue CURRENT_TIMER
+			}
+		}
+
+		timers = append(
+			timers,
+			StoredTimer{
+				Key:      currentTimer.Key,
+				Day:      *currentTimer.StartedAt,
+				Duration: time.Since(*currentTimer.StartedAt),
+			},
+		)
+	}
+
 	var total float64
 	daysTotal := make([]float64, days)
 
